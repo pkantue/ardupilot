@@ -18,6 +18,7 @@
 
 #include "SIM_Multicopter.h"
 #include <AP_Motors/AP_Motors.h>
+#include "h1_quad_definitions.h"
 
 #include <stdio.h>
 
@@ -33,9 +34,9 @@ MultiCopter::MultiCopter(const char *home_str, const char *frame_str) :
         exit(1);
     }
     if (strstr(frame_str, "-fast")) {
-        frame->init(1.5, 0.5, 85, 4*radians(360));
+        frame->init(MASS, 0.4, 85, 4*radians(360));
     } else {
-        frame->init(1.5, 0.51, 15, 4*radians(360));
+        frame->init(MASS, 0.4, 15, 4*radians(360));
     }
     frame_height = 0.1;
     ground_behavior = GROUND_BEHAVIOR_NO_MOVEMENT;
@@ -46,7 +47,7 @@ void MultiCopter::calculate_forces(const struct sitl_input &input, Vector3f &rot
 {
     frame->calculate_forces(*this, input, rot_accel, body_accel);
 }
-    
+
 /*
   update the multicopter simulation by one time step
  */
