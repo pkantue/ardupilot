@@ -82,7 +82,10 @@ public:
     static bool parse_home(const char *home_str, Location &loc, float &yaw_degrees);
 
     // get frame rate of model in Hz
-    float get_rate_hz(void) const { return rate_hz; }       
+    float get_rate_hz(void) const { return rate_hz; }
+
+    // get location altitude for atmospheric model - Assumes origin is at MSL
+    float get_loc_alt(void) const { return -position.z; }
 
     const Vector3f &get_gyro(void) const {
         return gyro;

@@ -39,6 +39,7 @@ public:
         num_motors(_num_motors),
         motors(_motors) {}
 
+    float dT;                           // sampling rate of the model received from Aircraft class
 
     // find a frame by name
     static Frame *find_frame(const char *name);
@@ -46,15 +47,26 @@ public:
     // initialise frame
     void init(float mass, float hover_throttle, float terminal_velocity, float terminal_rotation_rate);
 
+    // initialise the aerodynamic and kinematic structures
+    void initStruct(Motor::aero_struct *quad_lan, Motor::kine_struct *kine_lan);
+
+    // update the kinematic structure
+    void updateStruct(const Aircraft &aircraft, Motor::kine_struct *kine_lan);
+
+    Vector3f getSign(Vector3f input);
+
+    void atmosphere(const double  kine_z, Motor::Atmos_struct *Atm);
+
     // calculate rotational and linear accelerations
     void calculate_forces(const Aircraft &aircraft,
                           const Aircraft::sitl_input &input,
                           Vector3f &rot_accel, Vector3f &body_accel);
-    
+
     float terminal_velocity;
     float terminal_rotation_rate;
     float thrust_scale;
     float mass;
+    Vector3f inertia;
     uint8_t motor_offset;
 };
 }
