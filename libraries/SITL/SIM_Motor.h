@@ -18,12 +18,7 @@
 
 #pragma once
 
-/** local variables */
-#define INTERP_ROWS		4
-#define INTERP_COLS		8
-
 #include "SIM_Aircraft.h"
-#include "h1_quad_definitions.h"
 
 namespace SITL {
 
@@ -42,11 +37,6 @@ public:
     float roll_min, roll_max;
     int8_t pitch_servo = -1;
     float pitch_min, pitch_max;
-
-	# include "struct_def.h"
-
-	aero_struct motor_aero;				// data structure for each rotor
-    kine_struct motor_kine;			// kinematic structure for each rotor
 
     // support for servo slew rate
     enum {SERVO_NORMAL, SERVO_RETRACT} servo_type;
@@ -83,42 +73,8 @@ public:
                           float thrust_scale,
                           uint8_t motor_offset,
                           Vector3f &rot_accel, // rad/sec
-                          Vector3f &body_thrust, // Z is down
-                          aero_struct *quad_lan,
-                          kine_struct *kine_lan,
-                          const float dTime);
+                          Vector3f &body_thrust); // Z is down
 
     uint16_t update_servo(uint16_t demand, uint64_t time_usec, float &last_value);
-
-    // additional functions
-    double data_interp(const double data[INTERP_ROWS][INTERP_COLS],
-	                   const double row_array[INTERP_ROWS],
-	                   const double col_array[INTERP_COLS],
-	                   double row_input,
-	                   double col_input);
-
-    void calc_rotor(aero_struct *quad_lan, kine_struct *kine_lan, const double Ts);
-	void calc_rotorpseed(aero_struct *quad_lan, kine_struct *kine_lan, const double Ts);
-	void calc_rotor_flap_dynamics(aero_struct *quad_lan, const kine_struct *kine_lan, const double Ts);
-	void TransferFunc(const double input, aero_struct *rotor, const double dT);
-	void TransformKine(kine_struct * kine_lan, const Vector3f arm);
-
-
-private:
-    // variables internal to each rotor
-    const double adv_ratio[INTERP_COLS] = { 0.00f, 0.09f, 0.17f, 0.26f, 0.35f, 0.43f, 0.52f, 0.61f};
-    const double rpm[INTERP_ROWS] = { 4000.00f, 5000.00f, 6000.00f, 6500.00f };
-    const double CT_data[INTERP_ROWS][INTERP_COLS] = {
-		{ 0.1156f, 0.1057f, 0.0949f, 0.0819f, 0.0677f, 0.0509f, 0.0317f, 0.0093f },
-		{ 0.1229f, 0.1114f, 0.0990f, 0.0858f, 0.0712f, 0.0543f, 0.0344f, 0.0114f },
-		{ 0.1279f, 0.1180f, 0.1040f, 0.0895f, 0.0748f, 0.0571f, 0.0370f, 0.0140f },
-		{ 0.1298f, 0.1203f, 0.1063f, 0.0906f, 0.0760f, 0.0583f, 0.0384f, 0.0149f } };
-
-    const double CQ_data[INTERP_ROWS][INTERP_COLS] = {
-		{ 0.0074f, 0.0073f, 0.0071f, 0.0068f, 0.0063f, 0.0056f, 0.0048f, 0.0037f },
-		{ 0.0079f, 0.0077f, 0.0074f, 0.0070f, 0.0066f, 0.0059f, 0.0049f, 0.0038f },
-		{ 0.0083f, 0.0081f, 0.0078f, 0.0073f, 0.0069f, 0.0061f, 0.0051f, 0.0039f },
-		{ 0.0084f, 0.0083f, 0.0080f, 0.0074f, 0.0070f, 0.0062f, 0.0052f, 0.0040f } };
-
 };
 }
