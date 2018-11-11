@@ -271,7 +271,7 @@ void Copter::init_disarm_motors()
 void Copter::motors_output()
 {
 #if ADVANCED_FAILSAFE == ENABLED
-    // this is to allow the failsafe module to deliberately crash 
+    // this is to allow the failsafe module to deliberately crash
     // the vehicle. Only used in extreme circumstances to meet the
     // OBC rules
     if (g2.afs.should_crash_vehicle()) {
@@ -296,6 +296,16 @@ void Copter::motors_output()
         } else if (motors.get_interlock() && !interlock) {
             motors.set_interlock(false);
             Log_Write_Event(DATA_MOTORS_INTERLOCK_DISABLED);
+        }
+
+
+        /// Introduce fault based on the inertial speed - To be converted to GCS Mavlink input
+        if (inertial_nav.get_velocity_xy() > 500) // 10 m/s
+        {
+            motors.set_fault_state(1);  // Fault #1 on any/all motors
+        }
+        else{
+            motors.set_fault_state(0);
         }
 
         // send output signals to motors

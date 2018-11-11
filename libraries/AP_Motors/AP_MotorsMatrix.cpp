@@ -87,6 +87,17 @@ void AP_MotorsMatrix::output_to_motors()
     int8_t i;
     int16_t motor_out[AP_MOTORS_MAX_NUM_MOTORS];    // final pwm values sent to the motor
 
+    float fault_ratio[AP_MOTORS_MAX_NUM_MOTORS] = {0.0};
+    float perc_loss = 0.9;
+    int randNum = rand()%(3-0 + 1) + 0; // between range of 0 and 3
+
+    // For testing purposes, the default motor is motor #1 (index 0)
+    if (_faulty_motor)
+    {
+        fault_ratio[randNum] = perc_loss;
+    }
+
+
     switch (_spool_mode) {
         case SHUT_DOWN:
             // sends minimum values out to the motors
@@ -111,7 +122,7 @@ void AP_MotorsMatrix::output_to_motors()
             // set motor output based on thrust requests
             for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++) {
                 if (motor_enabled[i]) {
-                    motor_out[i] = calc_thrust_to_pwm(_thrust_rpyt_out[i]);
+                    motor_out[i] = calc_thrust_to_pwm((1.0 - fault_ratio[i])*_thrust_rpyt_out[i]);
                 }
             }
             break;

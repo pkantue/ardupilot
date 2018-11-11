@@ -72,6 +72,8 @@ public:
     float               get_throttle() const { return constrain_float(_throttle_filter.get(),0.0f,1.0f); }
     virtual float       get_throttle_hover() const = 0;
 
+    void                set_fault_state(uint16_t state){ _faulty_motor = state; };  // range 0 to 4 (types of faults)
+    uint16_t            get_fault_state() const { return _faulty_motor; }
     // spool up states
     enum spool_up_down_desired {
         DESIRED_SHUT_DOWN = 0,              // all motors stop
@@ -195,4 +197,5 @@ protected:
     float _yaw_radio_passthrough = 0.0f;      // yaw input from pilot in -1 ~ +1 range.  used for setup and providing servo feedback while landed
 
     AP_Int8             _pwm_type;            // PWM output type
+    uint16_t            _faulty_motor;        // flag to indicate and assign fault in motor subsystem
 };
