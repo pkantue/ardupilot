@@ -176,7 +176,7 @@ Frame *Frame::find_frame(const char *name)
 }
 
 // calculate rotational and linear accelerations
-void Frame::calculate_forces(const Aircraft &aircraft,
+void Frame::calculate_forces(Aircraft &aircraft,
                              const Aircraft::sitl_input &input,
                              Vector3f &rot_accel,
                              Vector3f &body_accel)
@@ -196,6 +196,12 @@ void Frame::calculate_forces(const Aircraft &aircraft,
         motors[i].calculate_forces(input, thrust_scale, motor_offset, mraccel, mthrust,&motors[i].motor_aero,&motors[i].motor_kine,dT);
         rot_accel += mraccel;
         thrust += mthrust;
+
+        // assign rotor values
+        aircraft.af1[i] = motors[i].motor_aero.a_rad;
+        aircraft.bf1[i] = motors[i].motor_aero.b_rad;
+        aircraft.omega[i] = motors[i].motor_aero.omega;
+        aircraft.motor_out[i] = motors[i].motor_aero.omega_out;
     }
 
     body_accel = thrust/mass;

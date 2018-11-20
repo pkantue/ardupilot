@@ -21,6 +21,18 @@ struct sitl_fdm {
     double battery_current; // Amps
     double rpm1;            // main prop RPM
     double rpm2;            // secondary RPM
+    float omega1; // motor angular speed [rad/s]
+    float omega2;
+    float omega3;
+    float omega4;
+    float a1; // longitudional flapping angles [rad]
+    float a2;
+    float a3;
+    float a4;
+    float b1; // lateral flapping angles [rad]
+    float b2;
+    float b3;
+    float b4;
     uint8_t rcin_chan_count;
     float  rcin[8];         // RC input 0..1
     Vector3f bodyMagField;  // Truth XYZ magnetic field vector in body-frame. Includes motor interference. Units are milli-Gauss.

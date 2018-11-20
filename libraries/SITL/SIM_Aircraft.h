@@ -45,6 +45,11 @@ public:
         } wind;
     };
 
+    float omega[8]; // motor angular speed [rad/s]
+    float motor_out[8]; // ESC motor inputs [-]
+    float af1[8]; // longitudional flapping angles vector [rad]
+    float bf1[8]; // lateral flapping angles vector [rad]
+
     /*
       set simulation speedup
      */

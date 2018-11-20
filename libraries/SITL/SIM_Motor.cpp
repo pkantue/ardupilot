@@ -211,6 +211,8 @@ void Motor::calc_rotorpseed(aero_struct *quad_lan, kine_struct *kine_lan, const 
     // double omega;
 	double omega_cmd;
 	double omega_max;
+	double alph = (tf_wn/1200.0)/(tf_wn/1200.0 + 1);
+	double temp;
 	//double mu_z;
 
 	//dmotor = CSlimit(0, MAX_THRUST, quad_lan->dmotor);
@@ -234,22 +236,11 @@ void Motor::calc_rotorpseed(aero_struct *quad_lan, kine_struct *kine_lan, const 
 	// omega_cmd = CSlimit(0,omega_max,omega_cmd);
 	omega_cmd = constrain_float(omega_cmd,0,omega_max);
 
-	//if (quad_lan->omega != 0.0){
-	//	mu_z = (kine_lan->vibb.z) / (quad_lan->omega*R_mr);
-	//}
-	//else{
-	//	mu_z = 0.0;
-	//}
-
-    // Q_e_mr = P_eng_max*defl_t/quad_lan->omega;
-    // CQ_cmd = data_interp(CQ_data,rpm,adv_ratio,omega_cmd,mu_z);
-
-	//Q_e_mr = CQ_cmd*kine_lan->rho*(omega_cmd*R_mr)*(omega_cmd*R_mr)*PI*pow(R_mr, 3);
-
-	// omega_dot1 = quad_lan->omega_dot;
-
 	// Compute rotor dynamics based on rotor/propeller mechanics (including faults)
-	TransferFunc(omega_cmd, quad_lan, Ts);
+	// TransferFunc(omega_cmd, quad_lan, Ts);
+
+    temp = alph*omega_cmd + (1.0 - alph)*quad_lan->omega_out;
+	quad_lan->omega_out = temp;
 
 	// protection against negative rotation (potentially)
 	if (quad_lan->omega_out < 0.0){
@@ -257,6 +248,7 @@ void Motor::calc_rotorpseed(aero_struct *quad_lan, kine_struct *kine_lan, const 
 	}
 
 	quad_lan->omega = omega_cmd/9.5493;
+	// quad_lan->omega = quad_lan->omega_out/9.5493;
 
 }
 
@@ -431,16 +423,15 @@ void Motor::TransferFunc(const double input, aero_struct *rotor, const double dT
 {
 	int i,j,n;
 
-	double a[10] = {0};
-	double b[10] = {0};
-	double beta[10] = {0};
-	double dX[10] = {0};
-	double dX1[10] = {0};
-	double X[10] = {0};
+	double a[10] = {0.0};
+	double b[10] = {0.0};
+	double beta[10] = {0.0};
+	double dX[10] = {0.0};
+	double dX1[10] = {0.0};
+	double X[10] = {0.0};
 	double u,y;
 
 	n = rotor->nIn;
-
 
 	beta[0] = 0.0;
 

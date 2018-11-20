@@ -107,7 +107,7 @@ H1 Quadcopter layout as per ArduCopter 3.4
 #define GK_p 		0.004
 #define GK_i 		0.09
 
-#define tf_wn		60.2     /* natural frequency */
+#define tf_wn		6.2     /* natural frequency */
 #define tf_zeta 	0.89    /* damping ratio */
 #define tf_w0		0.0     /* non-minimum zero - 0.0005 */
 #define coeff       3       /* Transfer function no. of coeffients */

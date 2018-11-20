@@ -123,15 +123,27 @@ void SITL::Log_Write_SIMSTATE(DataFlash_Class *DataFlash)
         yaw -= 360;
     }
 
-    struct log_AHRS pkt = {
+    struct log_SITL pkt = {
         LOG_PACKET_HEADER_INIT(LOG_SIMSTATE_MSG),
         time_us : AP_HAL::micros64(),
-        roll    : (int16_t)(state.rollDeg*100),
-        pitch   : (int16_t)(state.pitchDeg*100),
-        yaw     : (uint16_t)(wrap_360_cd(yaw*100)),
-        alt     : (float)state.altitude,
-        lat     : (int32_t)(state.latitude*1.0e7),
-        lng     : (int32_t)(state.longitude*1.0e7)
+        omega1  : (float)(state.omega1),
+        omega2  : (float)(state.omega2),
+        omega3  : (float)(state.omega3),
+        omega4  : (float)(state.omega4),
+        a1     : (float)(state.a1),
+        a2     : (float)(state.a2),
+        a3     : (float)(state.a3),
+        a4     : (float)(state.a4),
+        b1     : (float)(state.b1),
+        b2     : (float)(state.b2),
+        b3     : (float)(state.b3),
+        b4     : (float)(state.b4)
+        //roll    : (int16_t)(state.rollDeg*100),
+        //pitch   : (int16_t)(state.pitchDeg*100),
+        //yaw     : (uint16_t)(wrap_360_cd(yaw*100)),
+        //alt     : (float)state.altitude,
+        //lat     : (int32_t)(state.latitude*1.0e7),
+        //lng     : (int32_t)(state.longitude*1.0e7)
     };
     DataFlash->WriteBlock(&pkt, sizeof(pkt));
 }
