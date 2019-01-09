@@ -163,6 +163,9 @@ private:
     // AP_Notify instance
     AP_Notify notify;
 
+    // Random fault motor number
+    uint8_t randNum; // between range of 0 and 3
+
     // used to detect MAVLink acks from GCS to stop compassmot
     uint8_t command_ack_counter;
 
@@ -363,6 +366,9 @@ private:
 #endif
 
     MOTOR_CLASS motors;
+    uint8_t sysid_num_motor;
+
+    uint8_t sysid_man_flag;
 
     // GPS variables
     // Sometimes we need to remove the scaling for distance calcs

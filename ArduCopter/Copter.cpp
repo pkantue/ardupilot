@@ -83,6 +83,7 @@ Copter::Copter(void) :
     rtl_loiter_start_time(0),
     auto_trim_counter(0),
     ServoRelayEvents(relay),
+    sysid_man_flag(0),
 #if CAMERA == ENABLED
     camera(&relay),
 #endif
