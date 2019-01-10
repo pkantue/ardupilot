@@ -39,7 +39,8 @@ AP_Motors::AP_Motors(uint16_t loop_rate, uint16_t speed_hz) :
     _air_density_ratio(1.0f),
     _motor_map_mask(0),
     _motor_fast_mask(0),
-    _faulty_motor(0)
+    _faulty_motor(0),
+    _sysid_mode(NO_SYSID)
 {
     // init other flags
     _flags.armed = false;
@@ -205,3 +206,248 @@ void AP_Motors::add_motor_num(int8_t motor_num)
         }
     }
 }
+
+void AP_Motors::set_sysid_state(uint8_t mode, uint16_t Dt_in,
+                                        uint16_t Dt_out, uint16_t Dt_step, float Amp,
+                                        uint8_t rotor_loc, uint8_t num_rotor, uint8_t repeat, uint16_t Dt_rep)
+{
+    switch (mode){
+        case (0):
+            _sysid_mode = NO_SYSID;
+        break;
+        case (1):
+            _sysid_mode = DOUBLET_SINGLE;
+            break;
+        case (2):
+            _sysid_mode = MULTI_SINGLE;
+            break;
+        case (3):
+            _sysid_mode = DOUBLET_ALL;
+            break;
+        case (4):
+            _sysid_mode = MULTI_ALL;
+            break;
+    }
+
+    _sysid_dtin = Dt_in;
+    _sysid_dtout = Dt_out;
+    _sysid_dtstep = Dt_step;
+    _sysid_Amp = Amp;
+    _sysid_rotor = rotor_loc; // rotor location
+    _sysid_num_rotor = num_rotor; // airframe number of rotors (speed optimization)
+
+    switch (repeat){
+        case (0):
+            _sysid_repeat = NO_REPEAT;
+            break;
+        case (1):
+            _sysid_repeat = DO_REPEAT;
+            break;
+    }
+
+    _sysid_dtrep = Dt_rep;
+    _rotor_delay = Dt_rep/2; // it was half the timestep
+}
+
+void AP_Motors::sysid_exe(const float *cur_mot_values, float *new_mot_values)
+{
+    uint8_t num_steps;
+    uint32_t steps_vec[10] = {0};
+    float amp_vec[10] = {0.0};
+
+    int i;
+
+    _man_flag = 0;
+
+    if (_sysid_mode == NO_SYSID)
+    {
+        for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+        {
+            _hold_motor[i] = cur_mot_values[i];
+            new_mot_values[i] = _hold_motor[i];
+        }
+
+        return; // exit function
+    }
+
+    if ((_sysid_mode == DOUBLET_SINGLE) || (_sysid_mode == DOUBLET_ALL))
+    {
+        num_steps = 4;
+
+        steps_vec[0] = _sysid_dtin;
+        steps_vec[1] = _sysid_dtin + (1)*_sysid_dtstep;
+        steps_vec[2] = _sysid_dtin + (1 + 1)*_sysid_dtstep;
+        steps_vec[3] = _sysid_dtin + (1 + 1)*_sysid_dtstep + _sysid_dtout;
+        steps_vec[4] = 0;
+
+        amp_vec[0] = 1;
+        amp_vec[1] = 1*_sysid_Amp;
+        amp_vec[2] = 1/_sysid_Amp;
+        amp_vec[3] = 1;
+
+    }
+
+    if ((_sysid_mode == MULTI_SINGLE) || (_sysid_mode == MULTI_ALL))
+    {
+
+        num_steps = 7;
+
+        steps_vec[0] = _sysid_dtin;
+        steps_vec[1] = _sysid_dtin + (1)*_sysid_dtstep;
+        steps_vec[2] = _sysid_dtin + (1 + 3)*_sysid_dtstep;
+        steps_vec[3] = _sysid_dtin + (1 + 3 + 2)*_sysid_dtstep;
+        steps_vec[4] = _sysid_dtin + (1 + 3 + 2 + 1)*_sysid_dtstep;
+        steps_vec[5] = _sysid_dtin + (1 + 3 + 2 + 1 + 1)*_sysid_dtstep;
+        steps_vec[6] = _sysid_dtin + (1 + 3 + 2 + 1 + 1)*_sysid_dtstep + _sysid_dtout;
+        steps_vec[7] = 0;
+
+        amp_vec[0] = 1;
+        amp_vec[1] = 1*_sysid_Amp;
+        amp_vec[2] = 1/_sysid_Amp;
+        amp_vec[3] = 1*_sysid_Amp;
+        amp_vec[4] = 1/_sysid_Amp;
+        amp_vec[5] = 1*_sysid_Amp;
+        amp_vec[6] = 1;
+    }
+
+    if ((_sysid_mode == DOUBLET_SINGLE) || (_sysid_mode == MULTI_SINGLE))
+    {
+        _num_rotor_counter = _sysid_rotor;
+        _sysid_num_rotor = _num_rotor_counter;
+    }
+
+    // hold current value ONCE
+    if (_hold_val_flag < 1)
+    {
+        for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+        {
+            _hold_motor[i] = cur_mot_values[i];
+        }
+        _hold_val_flag = 1;
+        _repeat_counter = 0;
+        _man_counter = 0;
+    }
+
+    _num_rotor_counter = constrain_float(_num_rotor_counter,0,AP_MOTORS_MAX_NUM_MOTORS);
+    _num_steps_counter = constrain_float(_num_steps_counter,0,num_steps);
+
+    if (_man_counter < steps_vec[_num_steps_counter])
+    {
+        // output the holding values for all rotors
+        for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+        {
+            new_mot_values[i] = _hold_motor[i];
+        }
+
+        new_mot_values[_num_rotor_counter] = amp_vec[_num_steps_counter]*_hold_motor[_num_rotor_counter];
+
+        _man_counter++;
+        _man_flag = 1; // maneuver is active
+    }
+    else if (_num_steps_counter < num_steps)
+    {
+		// output the holding values for all rotors
+        for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+        {
+            new_mot_values[i] = _hold_motor[i];
+        }
+
+        new_mot_values[_num_rotor_counter] = amp_vec[_num_steps_counter]*_hold_motor[_num_rotor_counter];
+
+        _num_steps_counter++;
+        _man_flag = 1; // maneuver is active
+    }
+    else if (_sysid_repeat)
+    {
+        if (_num_rotor_counter < (_sysid_num_rotor-1))
+        {
+            _rotor_delay_counter++; // this is done to ensure the controller regains stability/control
+
+            if (_rotor_delay_counter > _rotor_delay)
+            {
+                _num_rotor_counter++;
+                _man_counter = 0;
+                _hold_val_flag = 0;
+                _rotor_delay_counter = 0;
+                _num_steps_counter = 0;
+
+				// passthrough controller values
+				for (i = 0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+				{
+					new_mot_values[i] = cur_mot_values[i];
+				}
+
+            }
+            else
+            {
+                // passthrough controller values
+                for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+                {
+                    new_mot_values[i] = cur_mot_values[i];
+                }
+            }
+        }
+        else if (_repeat_counter < _sysid_dtrep)
+        {
+            // passthrough controller values
+            for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+            {
+                new_mot_values[i] = cur_mot_values[i];
+            }
+            _repeat_counter++;
+        }
+        else // repeat delay period has lapsed reset all counters
+        {
+            // passthrough controller values
+            for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+            {
+                new_mot_values[i] = cur_mot_values[i];
+            }
+            _repeat_counter = 0;
+            _hold_val_flag = 0;
+            _man_counter = 0;
+            _rotor_delay_counter = 0;
+            _num_steps_counter = 0;
+			_num_rotor_counter = 0;
+        }
+    }
+    else
+    {
+        if (_num_rotor_counter < (_sysid_num_rotor-1))
+        {
+            _rotor_delay_counter++; // this is done to ensure the controller regains stability/control
+
+            if (_rotor_delay_counter > _rotor_delay)
+            {
+                _num_rotor_counter++;
+                _man_counter = 0;
+                _hold_val_flag = 0;
+                _rotor_delay_counter = 0;
+                _num_steps_counter = 0;
+
+				// passthrough controller values
+				for (i = 0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+				{
+					new_mot_values[i] = cur_mot_values[i];
+				}
+            }
+            else
+            {
+                // passthrough controller values
+                for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+                {
+                    new_mot_values[i] = cur_mot_values[i];
+                }
+            }
+        }
+        else
+        {
+            // passthrough controller values
+            for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+            {
+                new_mot_values[i] = cur_mot_values[i];
+            }
+        }
+    }
+}
+

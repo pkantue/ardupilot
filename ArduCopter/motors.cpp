@@ -184,6 +184,30 @@ bool Copter::init_arm_motors(bool arming_from_gcs)
     sprayer.test_pump(false);
 #endif
 
+#if FRAME_CONFIG == QUAD_FRAME
+    sysid_num_motor = 4u;
+#elif FRAME_CONFIG == TRI_FRAME
+    sysid_num_motor = 3u;
+#elif FRAME_CONFIG == HEXA_FRAME
+    sysid_num_motor = 5u;
+#elif FRAME_CONFIG == Y6_FRAME
+    sysid_num_motor = 6u;
+#elif FRAME_CONFIG == OCTA_FRAME
+    sysid_num_motor = 8u;
+#elif FRAME_CONFIG == OCTA_QUAD_FRAME
+    sysid_num_motor = 8u;
+#elif FRAME_CONFIG == HELI_FRAME
+    sysid_num_motor = 4u; // To be checked as the last two servoces
+#elif FRAME_CONFIG == SINGLE_FRAME
+    sysid_num_motor = 6u;
+#elif FRAME_CONFIG == COAX_FRAME
+    sysid_num_motor = 6u;
+#else
+    sysid_num_motor = 4u;
+#endif
+
+    sysid_man_flag = 0u;
+
     // enable output to motors
     enable_motor_output();
 
@@ -210,6 +234,12 @@ bool Copter::init_arm_motors(bool arming_from_gcs)
 
     // Start the arming delay
     ap.in_arming_delay = true;
+
+    //randomize faulty motor
+    randNum = rand()%(3-0 + 1) + 0; // between 0 and 3
+
+    //initialize system identification framework
+    motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
 
     // return success
     return true;
@@ -270,6 +300,7 @@ void Copter::init_disarm_motors()
 // motors_output - send output to motors library which will adjust and send to ESCs and servos
 void Copter::motors_output()
 {
+
 #if ADVANCED_FAILSAFE == ENABLED
     // this is to allow the failsafe module to deliberately crash
     // the vehicle. Only used in extreme circumstances to meet the
@@ -300,12 +331,31 @@ void Copter::motors_output()
 
 
         /// Introduce fault based on the inertial speed - To be converted to GCS Mavlink input
-        if (inertial_nav.get_velocity_xy() > 500) // 10 m/s
+        if (inertial_nav.get_velocity_xy() > 300) // 3 m/s
         {
-            motors.set_fault_state(1);  // Fault #1 on any/all motors
+            /// Fault emulation
+            motors.set_fault_state(0); //randNum);  // Fault #1 on any/all motors
+
+
+            /// Fault identification activation
+            if (( control_mode == AUTO))// && (ahrs.roll < 0.05f) && ahrs.get_gyro().x < 0.1f && ahrs.get_gyro().y < 0.1f && ahrs.get_gyro().z < 0.1 )
+            {
+                                /*	mode    Dt_in  Dt_out D_step  Amp     Rotor   NumOfRotors       Repeat	Dt_repeat */
+                motors.set_sysid_state(3,   100,    100,    100,    1.15,   0,      sysid_num_motor,  1,      1200);
+                //motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
+                sysid_man_flag = motors.get_man_state();
+            }
+            else{
+                motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
+            }
+
         }
         else{
+            /// Fault emulation
             motors.set_fault_state(0);
+
+            /// Fault identification
+            motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
         }
 
         // send output signals to motors

@@ -72,8 +72,18 @@ public:
     float               get_throttle() const { return constrain_float(_throttle_filter.get(),0.0f,1.0f); }
     virtual float       get_throttle_hover() const = 0;
 
+    enum sysid_mode {NO_SYSID=0, DOUBLET_SINGLE=1, MULTI_SINGLE=2, DOUBLET_ALL=3, MULTI_ALL=4};
+    enum sysid_rep {NO_REPEAT=0, DO_REPEAT=1};
+
     void                set_fault_state(uint16_t state){ _faulty_motor = state; };  // range 0 to 4 (types of faults)
     uint16_t            get_fault_state() const { return _faulty_motor; }
+    void                set_sysid_state(uint8_t mode, uint16_t Dt_in,
+                                        uint16_t Dt_out, uint16_t Dt_step, float Amp,
+                                        uint8_t rotor_loc, uint8_t num_rotor, uint8_t repeat, uint16_t Dt_rep);
+
+    uint16_t            get_sysid_state() const { return _sysid_mode; }
+    uint8_t             get_man_state() const { return _man_flag; }
+
     // spool up states
     enum spool_up_down_desired {
         DESIRED_SHUT_DOWN = 0,              // all motors stop
@@ -149,7 +159,10 @@ protected:
 
     // add a motor to the motor map
     void add_motor_num(int8_t motor_num);
-    
+
+    // motor system identification execution
+    void sysid_exe(const float *cur_mot_values, float *new_mot_values);
+
     // update the throttle input filter
     virtual void        update_throttle_filter() = 0;
 
@@ -198,4 +211,39 @@ protected:
 
     AP_Int8             _pwm_type;            // PWM output type
     uint16_t            _faulty_motor;        // flag to indicate and assign fault in motor subsystem
+
+
+    /// System identification maneuver design framework
+    ///*  mode = 0    - Doublet input on Singular Rotor */
+    ///*  mode = 1    - 3211 input on Singular Rotor */
+    ///*  mode = 2    - Doublet input on All Rotors */
+    ///*  mode = 3    - 3211 input on All Rotors */
+    ///*  Dt_in       - Number of samples leading of constant value fore maneuver */
+    ///*  Dt_out      - Number of samples leading of constant value aft maneuver */
+    ///*  Dt_step     - Number of samples forming each maneuver leg */
+    ///*  Rotor       - Chosen rotor to maneuver design
+    ///*  Repeat = 0  - No Reoccurance of maneuvre */
+    ///*  Repeat = 1  - Reoccurance of maneuvre */
+    ///*  Dt_rep      - Number of samples before repeating the maneuver */
+
+    sysid_mode          _sysid_mode;
+    uint16_t            _sysid_dtin;
+    uint16_t            _sysid_dtout;
+    uint16_t            _sysid_dtstep;
+    float               _sysid_Amp;
+    uint8_t             _sysid_rotor;
+    uint8_t             _sysid_num_rotor;
+    sysid_rep           _sysid_repeat;
+    uint16_t            _sysid_dtrep;
+
+    float               _hold_motor[AP_MOTORS_MAX_NUM_MOTORS];
+    uint8_t             _hold_val_flag = 0;
+
+    uint16_t            _repeat_counter = 0;
+    uint16_t            _man_counter = 0;
+    uint8_t             _num_steps_counter = 0;
+    uint8_t             _num_rotor_counter = 0;
+    uint16_t            _rotor_delay = 0;
+    uint16_t            _rotor_delay_counter = 0;
+    uint8_t             _man_flag = 0;
 };
