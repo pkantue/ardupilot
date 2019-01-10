@@ -33,10 +33,10 @@
   </metrics>
   <mass_balance>
     <!--roughtly approximating this as a solid sphere with correct mass-->
-    <ixx unit="KG*M2"> 0.036 </ixx>
-    <iyy unit="KG*M2"> 0.036 </iyy>
-    <izz unit="KG*M2">  0.036 </izz>
-    <emptywt unit="KG"> 1.0 </emptywt>
+    <ixx unit="KG*M2"> 0.03274 </ixx>
+    <iyy unit="KG*M2"> 0.04202 </iyy>
+    <izz unit="KG*M2"> 0.07327 </izz>
+    <emptywt unit="KG"> 1.75 </emptywt>
     <location name="CG" unit="IN">
       <x>  0.0 </x>
       <y>  0.0 </y>
