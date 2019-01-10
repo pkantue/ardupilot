@@ -201,7 +201,7 @@ void Frame::calculate_forces(Aircraft &aircraft,
         aircraft.af1[i] = motors[i].motor_aero.a_rad;
         aircraft.bf1[i] = motors[i].motor_aero.b_rad;
         aircraft.omega[i] = motors[i].motor_aero.omega;
-        aircraft.motor_out[i] = motors[i].motor_aero.omega_out;
+        aircraft.motor_out[i] = (float)motors[i].motor_aero.dmotor;
     }
 
     body_accel = thrust/mass;
@@ -280,7 +280,9 @@ void Frame::updateStruct(const Aircraft &aircraft, Motor::kine_struct *kine_lan)
     // kine_struct update
     kine_lan->Alt = aircraft.get_loc_alt();
     atmosphere(kine_lan->Alt,&atmos);
-    kine_lan->rho = atmos.rho;
+
+    // add protection from the air density in case error in flight controller sensor
+    kine_lan->rho = constrain_float(atmos.rho,1.14,1.225);
 
     kine_lan->vibb.x = vibb.x;
     kine_lan->vibb.y = vibb.y;
@@ -366,7 +368,6 @@ void Frame::initStruct(Motor::aero_struct *quad_lan, Motor::kine_struct *kine_la
     quad_lan->Kfactor1 = 1.0;
     quad_lan->Kfmax = 1.0;
     quad_lan->Kfmin = 0.5;
-    quad_lan->omega_out = 0.0;
     quad_lan->PrevInp = 0.0;
 
     // kine_struct initialization

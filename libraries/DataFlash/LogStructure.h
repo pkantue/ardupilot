@@ -204,6 +204,24 @@ struct PACKED log_AHRS {
     int32_t lng;
 };
 
+// this is specific to a quadcopter (4 rotors and respective flapping angles)
+struct PACKED log_SITL {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    float omega1; // motor angular speed [rad/s]
+    float omega2;
+    float omega3;
+    float omega4;
+    float a1; // longitudional flapping angles [rad]
+    float a2;
+    float a3;
+    float a4;
+    float b1; // lateral flapping angles [rad]
+    float b2;
+    float b3;
+    float b4;
+};
+
 struct PACKED log_POS {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -801,8 +819,8 @@ Format characters in the format string for binary log messages
       "AHR2","QccCfLL","TimeUS,Roll,Pitch,Yaw,Alt,Lat,Lng" }, \
     { LOG_POS_MSG, sizeof(log_POS), \
       "POS","QLLff","TimeUS,Lat,Lng,Alt,RelAlt" }, \
-    { LOG_SIMSTATE_MSG, sizeof(log_AHRS), \
-      "SIM","QccCfLL","TimeUS,Roll,Pitch,Yaw,Alt,Lat,Lng" }, \
+    { LOG_SIMSTATE_MSG, sizeof(log_SITL), \
+      "SIM","Qffffffffffff","TimeUS,Ome1,Ome2,Ome3,Ome4,af1,af2,af3,af4,bf1,bf2,bf3,bf4" }, \
     { LOG_EKF1_MSG, sizeof(log_EKF1), \
       "EKF1","QccCfffffffccc","TimeUS,Roll,Pitch,Yaw,VN,VE,VD,dPD,PN,PE,PD,GX,GY,GZ" }, \
     { LOG_EKF2_MSG, sizeof(log_EKF2), \
