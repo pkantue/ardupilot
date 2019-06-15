@@ -31,6 +31,8 @@ void AP_MotorsMatrix::Init()
 
     // enable fast channels or instant pwm
     set_update_rate(_speed_hz);
+
+    ini_servo_fault();
 }
 
 // set update rate to motors - a value in hertz
@@ -88,16 +90,26 @@ void AP_MotorsMatrix::output_to_motors()
     int16_t motor_out[AP_MOTORS_MAX_NUM_MOTORS];    // final pwm values sent to the motor
 
     float fault_ratio[AP_MOTORS_MAX_NUM_MOTORS] = {0.0};
-    float perc_loss = 0.0;
-
-    // For testing purposes, the default motor is motor #1 (index 0)
-    if (_faulty_motor)
-    {
-        fault_ratio[_faulty_motor] = perc_loss;
-    }
 
     /// system identification execution
     sysid_exe(_thrust_rpyt_out,_thrust_sysid);
+
+    // Rotor slippage - condition 1
+    if (_fault_type)
+    {
+        // emulate fault dynamics on chosen/random motor IF sysid maneuver is active
+        if ((_num_rotor_counter == _faulty_motor) && (_man_flag)){
+            _thrust_sysid[_faulty_motor] = exe_servo_fault(_thrust_sysid[_faulty_motor]);
+        }
+        else{
+            ini_servo_fault(); // initialize the servo fault emulator for next maneuver
+        }
+        fault_ratio[_faulty_motor] = 0.0;
+    }
+    // Thrust loss - condition 0
+    else{
+        fault_ratio[_faulty_motor] = _perc_loss;
+    }
 
     switch (_spool_mode) {
         case SHUT_DOWN:

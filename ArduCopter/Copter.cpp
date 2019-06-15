@@ -84,6 +84,9 @@ Copter::Copter(void) :
     auto_trim_counter(0),
     ServoRelayEvents(relay),
     sysid_man_flag(0),
+    sysid_counter(0),
+    fault_counter(0),
+    sysid_active_rotor(0),
 #if CAMERA == ENABLED
     camera(&relay),
 #endif

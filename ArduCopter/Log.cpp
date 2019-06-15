@@ -362,10 +362,10 @@ void Copter::Log_Write_Performance()
         num_long_running : perf_info_get_num_long_running(),
         num_loops        : perf_info_get_num_loops(),
         max_time         : perf_info_get_max_time(),
-        pm_test          : pmTest1,
+        pm_test          : sysid_counter, // Mod for debug purposes ONLY
         i2c_lockup_count : sysid_man_flag,
-        ins_error_count  : ins.error_count(),
-        log_dropped      : DataFlash.num_dropped() - perf_info_get_num_dropped(),
+        ins_error_count  : sysid_active_rotor,
+        log_dropped      : fault_counter, // wp_distance or // DataFlash.num_dropped() - perf_info_get_num_dropped(),
     };
     DataFlash.WriteCriticalBlock(&pkt, sizeof(pkt));
 }

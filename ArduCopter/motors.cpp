@@ -207,6 +207,7 @@ bool Copter::init_arm_motors(bool arming_from_gcs)
 #endif
 
     sysid_man_flag = 0u;
+    sysid_active_rotor = 0u;
 
     // enable output to motors
     enable_motor_output();
@@ -336,26 +337,55 @@ void Copter::motors_output()
             /// Fault emulation
             motors.set_fault_state(0); //randNum);  // Fault #1 on any/all motors
 
+            if (inertial_nav.get_velocity_xy() > 900) // 3m/s
+            {
+                if (fault_counter < 2000)
+                {
+                    motors.set_perc_loss(0.9);
+                    motors.set_fault_type(1); // 0 - Thrust loss 1 - Slippage condition
+                    fault_counter++;
+                }
+                else{
+                    motors.set_perc_loss(0.0);
+                    motors.set_fault_type(1);
+                    fault_counter = 0;
+                }
+            }
+            else{
+                motors.set_perc_loss(0.0);
+                motors.set_fault_type(0);
+                fault_counter = 0;
+            }
+
 
             /// Fault identification activation
             if (( control_mode == AUTO))// && (ahrs.roll < 0.05f) && ahrs.get_gyro().x < 0.1f && ahrs.get_gyro().y < 0.1f && ahrs.get_gyro().z < 0.1 )
             {
                                 /*	mode    Dt_in  Dt_out D_step  Amp     Rotor   NumOfRotors       Repeat	Dt_repeat */
-                motors.set_sysid_state(3,   100,    100,    100,    1.15,   0,      sysid_num_motor,  1,      1200);
-                //motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
+                motors.set_sysid_state(3,   100,    100,    100,    1.10,   0,      sysid_num_motor,  1,      1200);
+                sysid_active_rotor = motors.get_rotor_num();
                 sysid_man_flag = motors.get_man_state();
+
+                // This is a debug to see how how many values the NN has to learn with vs what's been logged
+                if (sysid_man_flag) { sysid_counter++;}
+                else {sysid_counter = 0;}
+
             }
             else{
                 motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
+                sysid_counter = 0;
             }
 
         }
         else{
             /// Fault emulation
             motors.set_fault_state(0);
+            motors.set_fault_type(0);
+            motors.set_perc_loss(0.0);
 
             /// Fault identification
             motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
+            sysid_counter = 0;
         }
 
         // send output signals to motors

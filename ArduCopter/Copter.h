@@ -369,6 +369,9 @@ private:
     uint8_t sysid_num_motor;
 
     uint8_t sysid_man_flag;
+    uint16_t sysid_counter;
+    uint16_t fault_counter;
+    uint8_t sysid_active_rotor;
 
     // GPS variables
     // Sometimes we need to remove the scaling for distance calcs

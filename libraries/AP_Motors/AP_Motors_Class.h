@@ -75,8 +75,12 @@ public:
     enum sysid_mode {NO_SYSID=0, DOUBLET_SINGLE=1, MULTI_SINGLE=2, DOUBLET_ALL=3, MULTI_ALL=4};
     enum sysid_rep {NO_REPEAT=0, DO_REPEAT=1};
 
-    void                set_fault_state(uint16_t state){ _faulty_motor = state; };  // range 0 to 4 (types of faults)
+    void                set_perc_loss( float state) { _perc_loss = state; }; // range is between 0.0 (no loss) and 1.0 (no thrust)
+    void                set_fault_state(uint16_t state){ _faulty_motor = state; };  // range of faulty motor
+    void                set_fault_type(uint16_t state){ _fault_type = state; };
     uint16_t            get_fault_state() const { return _faulty_motor; }
+    uint16_t            get_fault_type() const { return _fault_type; }
+    uint8_t             get_rotor_num() const { return _num_rotor_counter; }
     void                set_sysid_state(uint8_t mode, uint16_t Dt_in,
                                         uint16_t Dt_out, uint16_t Dt_step, float Amp,
                                         uint8_t rotor_loc, uint8_t num_rotor, uint8_t repeat, uint16_t Dt_rep);
@@ -163,6 +167,10 @@ protected:
     // motor system identification execution
     void sysid_exe(const float *cur_mot_values, float *new_mot_values);
 
+    // motor fault emulation functions
+    void                ini_servo_fault(void);
+    float               exe_servo_fault(float input);
+
     // update the throttle input filter
     virtual void        update_throttle_filter() = 0;
 
@@ -181,6 +189,17 @@ protected:
         uint8_t frame_orientation  : 4;    // PLUS_FRAME 0, X_FRAME 1, V_FRAME 2, H_FRAME 3, NEW_PLUS_FRAME 10, NEW_X_FRAME, NEW_V_FRAME, NEW_H_FRAME
         uint8_t interlock          : 1;    // 1 if the motor interlock is enabled (i.e. motors run), 0 if disabled (motors don't run)
     } _flags;
+
+    struct{
+        float a[3];
+        float b[3];
+        float X[3];
+        float dX[3];
+        float dX1[3];
+        float in;
+        float out;
+        uint8_t init_state;
+    }servo_param;
 
     // internal variables
     uint16_t            _loop_rate;                 // rate in Hz at which output() function is called (normally 400hz)
@@ -210,7 +229,9 @@ protected:
     float _yaw_radio_passthrough = 0.0f;      // yaw input from pilot in -1 ~ +1 range.  used for setup and providing servo feedback while landed
 
     AP_Int8             _pwm_type;            // PWM output type
-    uint16_t            _faulty_motor;        // flag to indicate and assign fault in motor subsystem
+    uint16_t            _faulty_motor;        // flag to indicate and assign fault in motor subsystem.
+    uint16_t            _fault_type;          // flag to indicate the type of fault to emulate.
+    float               _perc_loss;           // Percentage loss on rotor thrust (indicating slippage) - doesn't include phaseshift
 
 
     /// System identification maneuver design framework

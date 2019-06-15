@@ -40,6 +40,8 @@ AP_Motors::AP_Motors(uint16_t loop_rate, uint16_t speed_hz) :
     _motor_map_mask(0),
     _motor_fast_mask(0),
     _faulty_motor(0),
+    _fault_type(0),
+    _perc_loss(0),
     _sysid_mode(NO_SYSID)
 {
     // init other flags
@@ -451,3 +453,143 @@ void AP_Motors::sysid_exe(const float *cur_mot_values, float *new_mot_values)
     }
 }
 
+
+// This function is to initialize the servo fault dynamics required
+void AP_Motors::ini_servo_fault(void)
+{
+    float wn = 0;
+    float zeta = (float)0.89; // damping ratio
+
+    float wn_fault = (float)6.4;
+    float wn_healthy = 192;
+
+    if (_fault_type)
+    {
+        wn = wn_fault*_perc_loss + wn_healthy*(1 - _perc_loss);
+    }
+    else {
+        wn = wn_healthy;
+    }
+
+    servo_param.a[0] = 1;
+    servo_param.a[1] = 2*zeta*wn;
+    servo_param.a[2] = wn*wn;
+
+    servo_param.b[0] = 0*wn*wn;
+    servo_param.b[1] = 0*wn*wn;
+    servo_param.b[2] = 1*wn*wn;
+
+    for (int i=0; i < 3; i++){
+        servo_param.X[i] = 0;
+        servo_param.dX[i] = 0;
+        servo_param.dX1[i] = 0;
+    }
+
+    servo_param.in = 0;
+    servo_param.out = 0;
+    servo_param.init_state = 0;
+
+}
+
+// This function is to execute the servo fault emulation algorithm
+float AP_Motors::exe_servo_fault(float input)
+{
+    float wn = 0;
+    float zeta = (float)0.89; // damping ratio
+
+    float wn_fault = (float)6.4;
+    float wn_healthy = 192;
+    float beta[3];
+
+    uint8_t n;
+    n = sizeof(servo_param.a) / sizeof(servo_param.a[0]);
+
+    if (_fault_type)
+    {
+        wn = wn_fault*_perc_loss + wn_healthy*(1 - _perc_loss);
+    }
+    else {
+        wn = wn_healthy;
+    }
+
+    servo_param.a[0] = 1;
+    servo_param.a[1] = 2*zeta*wn;
+    servo_param.a[2] = wn*wn;
+
+    servo_param.b[0] = 0*wn*wn;
+    servo_param.b[1] = 0*wn*wn;
+    servo_param.b[2] = 1*wn*wn;
+
+    for (int i=0; i < n; i++)
+    {
+        // beta = b - b(1)*a;
+        beta[i] = servo_param.b[i] - servo_param.b[0]*servo_param.a[i];
+    }
+
+    if (!servo_param.init_state)
+    {
+        // X(end) = u/beta(end);
+        servo_param.X[2] = input/beta[2];
+        servo_param.init_state = 1;
+    }
+
+    /*
+     * for i = 2:length(a)
+     * if (i == 2)
+     * dX(i) = u; % state second derivative
+     * for j = 2:length(a)
+     * dX(i) = dX(i) - a(j)*X(j);
+     * end
+     * else
+     * dX(i) = X(i - 1); % state first derivative
+     * end
+     * end
+    */
+    for (int i=1; i < n; i++)
+    {
+        if(i == 1)
+        {
+            servo_param.dX[i] = input;
+            for (int j=1; j < n; j++)
+            {
+                servo_param.dX[i] = servo_param.dX[i] - servo_param.a[j]*servo_param.X[j];
+            }
+        }
+        else
+        {
+            servo_param.dX[i] = servo_param.X[i - 1]; // state first derivative
+        }
+    }
+    /*
+    y = b(1)*u; % feed through term
+    for (i = 2:length(a))
+        y = y + beta(i)*X(i);
+    end
+    output(k) = y;
+    */
+
+    // Feedthrough term
+    servo_param.out = servo_param.b[0]*input;
+
+    for (int i=1; i<n; i++)
+    {
+        servo_param.out += beta[i]*servo_param.X[i];
+    }
+
+    /*
+    % update state vector
+    for i = 2:length(a)
+        X(i)   = X(i) + 0.5*(dX(i) + dX1(i))*dt;
+        dX1(i) = dX(i);
+    end
+    */
+
+    // Update the state vector
+    for (int i=1; i < n; i++)
+    {
+        servo_param.X[i] += (float)0.5*(servo_param.dX[i] + servo_param.dX1[i])*(1.0f/_speed_hz);
+        servo_param.dX1[i] = servo_param.dX[i];
+    }
+
+    return servo_param.out;
+}
