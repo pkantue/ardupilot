@@ -341,7 +341,7 @@ void Copter::motors_output()
             {
                 if (fault_counter < 2000)
                 {
-                    motors.set_perc_loss(0.9);
+                    motors.set_perc_loss(0.7);
                     motors.set_fault_type(1); // 0 - Thrust loss 1 - Slippage condition
                     fault_counter++;
                 }
@@ -387,6 +387,9 @@ void Copter::motors_output()
             motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
             sysid_counter = 0;
         }
+
+        // execute FTC framework
+        ftc_exe();
 
         // send output signals to motors
         motors.output();

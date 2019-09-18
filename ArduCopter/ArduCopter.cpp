@@ -371,7 +371,7 @@ void Copter::ten_hz_logging_loop()
         if (1) { //should_log(MASK_LOG_PID)
             DataFlash.Log_Write_PID(LOG_PIDR_MSG, attitude_control.get_rate_roll_pid().get_pid_info());
             DataFlash.Log_Write_PID(LOG_PIDP_MSG, attitude_control.get_rate_pitch_pid().get_pid_info());
-            //DataFlash.Log_Write_PID(LOG_PIDY_MSG, attitude_control.get_rate_yaw_pid().get_pid_info());
+            DataFlash.Log_Write_PID(LOG_PIDY_MSG, attitude_control.get_rate_yaw_pid().get_pid_info());
             //DataFlash.Log_Write_PID(LOG_PIDA_MSG, g.pid_accel_z.get_pid_info() );
         }
     }
@@ -418,7 +418,7 @@ void Copter::twentyfive_hz_logging()
             DataFlash.Log_Write_PID(LOG_PIDR_MSG, attitude_control.get_rate_roll_pid().get_pid_info());
             DataFlash.Log_Write_PID(LOG_PIDP_MSG, attitude_control.get_rate_pitch_pid().get_pid_info());
             DataFlash.Log_Write_PID(LOG_PIDY_MSG, attitude_control.get_rate_yaw_pid().get_pid_info());
-            DataFlash.Log_Write_PID(LOG_PIDA_MSG, g.pid_accel_z.get_pid_info() );
+            //DataFlash.Log_Write_PID(LOG_PIDA_MSG, g.pid_accel_z.get_pid_info() );
         }
     }
 
@@ -427,6 +427,9 @@ void Copter::twentyfive_hz_logging()
         DataFlash.Log_Write_IMU(ins);
     }
 #endif
+
+    // Logging of FTC information
+    Log_Write_FTC();
 
 #if PRECISION_LANDING == ENABLED
     // log output

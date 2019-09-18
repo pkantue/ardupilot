@@ -87,6 +87,11 @@ Copter::Copter(void) :
     sysid_counter(0),
     fault_counter(0),
     sysid_active_rotor(0),
+    start_rfc(0),
+    J_the(0),
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    start_fdd(0),
+#endif // CONFIG_HAL_BOARD
 #if CAMERA == ENABLED
     camera(&relay),
 #endif

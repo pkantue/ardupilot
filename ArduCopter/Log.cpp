@@ -799,6 +799,35 @@ void Copter::Log_Write_Proximity()
 #endif
 }
 
+    int8_t placeholder1;
+    int8_t placeholder2;
+    int8_t placeholder3;
+    int8_t placeholder4;
+    int8_t placeholder5;
+    int8_t placeholder6;
+    int8_t placeholder7;
+    int8_t placeholder8;
+};
+
+// This is the Datablock write function for the FTC framework - This is to be used initially for debugging
+void Copter::Log_Write_FTC(void)
+{
+    struct log_FTC pkt = {
+        LOG_PACKET_HEADER_INIT(LOG_FTC_MSG),
+        time_us         : AP_HAL::micros64(),
+        placeholder1    : Q_matrix[0][0],
+        placeholder2    : Q_matrix[1][0],
+        placeholder3    : Q_matrix[2][0],
+        placeholder4    : Q_matrix[3][0],
+        placeholder5    : Q_matrix[0][1],
+        placeholder6    : Q_matrix[1][1],
+        placeholder7    : Q_matrix[2][1],
+        placeholder8    : Q_matrix[3][1]
+    };
+    DataFlash.WriteBlock(&pkt, sizeof(pkt));
+}
+
+
 const struct LogStructure Copter::log_structure[] = {
     LOG_COMMON_STRUCTURES,
 #if AUTOTUNE_ENABLED == ENABLED
@@ -843,6 +872,8 @@ const struct LogStructure Copter::log_structure[] = {
       "THRO",  "QBffffbbbb",  "TimeUS,Stage,Vel,VelZ,Acc,AccEfZ,Throw,AttOk,HgtOk,PosOk" },
     { LOG_PROXIMITY_MSG, sizeof(log_Proximity),
       "PRX",   "QBffffffff",  "TimeUS,Health,D0,D45,D90,D135,D180,D225,D270,D315" },
+    { LOG_FTC_MSG, sizeof(log_FTC),
+      "FTC", "Qbbbbbbbb", "TimeUS,Trn1,Trn2,Trn3,Trn4,Prd1,Prd2,Prd3,Prd4" },
 };
 
 #if CLI_ENABLED == ENABLED

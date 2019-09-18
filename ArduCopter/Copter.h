@@ -643,6 +643,34 @@ private:
     static const AP_Param::Info var_info[];
     static const struct LogStructure log_structure[];
 
+    // FTC and SPI specific declarations
+    void ftc_init(void);
+    void ftc_exe(void);
+    void rfc_init(void); // Initialization for the reconfigurable PID controller
+    void rfc_exe(void); // This with FDD forms part of the FTC algorithm
+
+    float J_the; // objective function to be minimized
+    uint8_t start_rfc; // start the reconfiguration once sys_id has started
+    int8_t Q_matrix[4][4]; // FDD TDOA matrix
+
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+
+    uint8_t start_fdd; // start the fdd
+    uint8_t NN_init[4]; // NN initiation flag
+    uint8_t NN_train[4]; // NN estimation flag
+    uint8_t NN_predict[4]; // NN prediction flag
+    uint16_t NN_sample[4]; // NN data sample counter
+    uint16_t init_counter = 0; // counter to emulate NN initialization
+    uint16_t train_counter = 0; // counter to emulate NN prediction
+    uint16_t predict_counter = 0; // counter to emulate NN prediction
+
+#endif // CONFIG_HAL_BOARD
+
+    void TeensySPI_init(void);
+    void TeensySPI_start(void);
+    void TeensySPI_update(void);
+    void Log_Write_FTC(void);
+
     void compass_accumulate(void);
     void compass_cal_update(void);
     void barometer_accumulate(void);
