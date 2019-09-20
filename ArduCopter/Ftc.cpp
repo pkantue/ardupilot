@@ -11,14 +11,9 @@ void Copter::ftc_init()
     int i;
     int j;
 
-    // zero initialize parameters
-    for (i=0; i<4; i++)
-    {
-        for (j=0; j<4; j++)
-        {
-            Q_matrix[i][j] = 1;
-        }
-    }
+    Q_rank = 0;
+    F_loc = 0;
+    F_mag = 0;
 
     #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 
@@ -28,6 +23,15 @@ void Copter::ftc_init()
         NN_train[i] = 0;
         NN_predict[i] = 0;
         NN_sample[i] = 0;
+    }
+
+    // zero initialize parameters
+    for (i=0; i<4; i++)
+    {
+        for (j=0; j<4; j++)
+        {
+            Q_matrix[i][j] = 1;
+        }
     }
 
     #else
@@ -43,6 +47,12 @@ void Copter::ftc_init()
 void Copter::ftc_exe()
 {
     #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+        int i;
+        int j;
+        float temp1 = 0.0;
+        float num_var[4] = {0};
+
+
         if (sysid_man_flag)
         {
             start_fdd = 1;
@@ -86,23 +96,63 @@ void Copter::ftc_exe()
                 predict_counter = 0;
             }
         }
-        int i;
 
         for (i=0; i<sysid_num_motor; i++)
         {
             if ((sysid_active_rotor == 0) && (NN_predict[i]))
             {
                 Q_matrix[sysid_active_rotor][i] = -25;
+                if ((i+1) > Q_rank){Q_rank = i+1;}
             }
             else if ((i == 0) && (NN_predict[sysid_active_rotor]))
             {
                 Q_matrix[sysid_active_rotor][i] = 25;
+                if ((i+1) > Q_rank){Q_rank = i+1;}
             }
             else if ((NN_predict[sysid_active_rotor]) && (NN_predict[i]))
             {
                 Q_matrix[sysid_active_rotor][i] = 3;
+                if ((i+1) > Q_rank){Q_rank = i+1;}
+            }
+
+        }
+
+        // compute the Q_matrix variance
+        if (sysid_num_motor > 0)
+        {
+            for (i=0; i<sysid_num_motor; i++)
+            {
+                for (j=0; j<sysid_num_motor; j++) // compute average across the column
+                {
+                    temp1 += (float)Q_matrix[j][i]/(float)sysid_num_motor;
+                }
+
+                // for loop here to compute the variance
+                for (j=0; j<sysid_num_motor; j++)
+                {
+                    num_var[i] += powf((float)Q_matrix[j][i] - temp1,2)/((float)sysid_num_motor - 1);
+                }
             }
         }
+
+        /// Compute fault location through finding column with highest variance
+        // initialize values
+        temp1 = num_var[0];
+        F_loc = 0;
+
+        for (i=1; i<sysid_num_motor; i++)
+        {
+            if (num_var[i] >= temp1)
+            {
+                F_loc = (uint8_t)i; /// This is passed via SPI
+                temp1 = num_var[i];
+            }
+        }
+
+        /// Compute fault magnitude
+        // This is computed based on the rotor
+        F_mag = abs((float)Q_matrix[F_loc][F_loc]); /// This is passed via SPI
+
 
     #else
         // collect Q_matrix data via SPI bus

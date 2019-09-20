@@ -651,7 +651,9 @@ private:
 
     float J_the; // objective function to be minimized
     uint8_t start_rfc; // start the reconfiguration once sys_id has started
-    int8_t Q_matrix[4][4]; // FDD TDOA matrix
+    uint8_t F_loc;  // fault location
+    uint8_t F_mag;  // fault magnitude
+    uint8_t Q_rank; // TDOA matrix rank
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 
@@ -660,6 +662,7 @@ private:
     uint8_t NN_train[4]; // NN estimation flag
     uint8_t NN_predict[4]; // NN prediction flag
     uint16_t NN_sample[4]; // NN data sample counter
+    int8_t Q_matrix[4][4]; // FDD TDOA matrix
     uint16_t init_counter = 0; // counter to emulate NN initialization
     uint16_t train_counter = 0; // counter to emulate NN prediction
     uint16_t predict_counter = 0; // counter to emulate NN prediction

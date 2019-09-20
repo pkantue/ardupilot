@@ -341,7 +341,7 @@ void Copter::motors_output()
             {
                 if (fault_counter < 2000)
                 {
-                    motors.set_perc_loss(0.7);
+                    motors.set_perc_loss(0.6);
                     motors.set_fault_type(1); // 0 - Thrust loss 1 - Slippage condition
                     fault_counter++;
                 }
