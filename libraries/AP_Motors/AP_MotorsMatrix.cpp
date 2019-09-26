@@ -33,6 +33,8 @@ void AP_MotorsMatrix::Init()
     set_update_rate(_speed_hz);
 
     ini_servo_fault();
+
+    ini_rfc_gain();
 }
 
 // set update rate to motors - a value in hertz
@@ -91,8 +93,12 @@ void AP_MotorsMatrix::output_to_motors()
 
     float fault_ratio[AP_MOTORS_MAX_NUM_MOTORS] = {0.0};
 
+    /// control allocation and reconfiguration
+    // add condition and option for this to be used
+    sysrfc_exe(_thrust_rpyt_out,_thrust_sysrfc);
+
     /// system identification execution
-    sysid_exe(_thrust_rpyt_out,_thrust_sysid);
+    sysid_exe(_thrust_sysrfc,_thrust_sysid);
 
     // Rotor slippage - condition 1
     if (_fault_type)

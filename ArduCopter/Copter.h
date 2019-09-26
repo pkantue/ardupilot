@@ -646,6 +646,7 @@ private:
     // FTC and SPI specific declarations
     void ftc_init(void);
     void ftc_exe(void);
+    void fdd_exe(void);
     void rfc_init(void); // Initialization for the reconfigurable PID controller
     void rfc_exe(void); // This with FDD forms part of the FTC algorithm
 
@@ -654,6 +655,14 @@ private:
     uint8_t F_loc;  // fault location
     uint8_t F_mag;  // fault magnitude
     uint8_t Q_rank; // TDOA matrix rank
+    uint16_t rfc_counter = 0; // counter before RFC begins computing objective functions
+
+    float J_p = 0;
+    float J_q = 0;
+    float J_r = 0;
+    float p_norm = 0;
+    float q_norm = 0;
+    float r_norm = 0;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 

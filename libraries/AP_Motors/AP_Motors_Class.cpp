@@ -209,6 +209,27 @@ void AP_Motors::add_motor_num(int8_t motor_num)
     }
 }
 
+void AP_Motors::sysrfc_exe(const float *cur_mot_values, float *new_mot_values)
+{
+    int i;
+
+    // add control allocation gain parameters
+    for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+    {
+        new_mot_values[i] = _rfc_gain[i]*cur_mot_values[i];
+    }
+}
+
+void AP_Motors::get_rfc_gain(float *gain_vec)
+{
+    int i;
+
+    for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+        {
+            _rfc_gain[i] = gain_vec[i];
+        }
+}
+
 void AP_Motors::set_sysid_state(uint8_t mode, uint16_t Dt_in,
                                         uint16_t Dt_out, uint16_t Dt_step, float Amp,
                                         uint8_t rotor_loc, uint8_t num_rotor, uint8_t repeat, uint16_t Dt_rep)
@@ -268,6 +289,12 @@ void AP_Motors::sysid_exe(const float *cur_mot_values, float *new_mot_values)
             _hold_motor[i] = cur_mot_values[i];
             new_mot_values[i] = _hold_motor[i];
         }
+
+        // reset values
+        _man_counter = 0;
+        _hold_val_flag = 0;
+        _rotor_delay_counter = 0;
+        _num_steps_counter = 0;
 
         return; // exit function
     }
@@ -592,4 +619,13 @@ float AP_Motors::exe_servo_fault(float input)
     }
 
     return servo_param.out;
+}
+
+void AP_Motors::ini_rfc_gain(void)
+{
+    int i;
+    for (i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++)
+        {
+            _rfc_gain[i] = 1.0f;
+        }
 }

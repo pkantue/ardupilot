@@ -15,6 +15,16 @@ void Copter::ftc_init()
     F_loc = 0;
     F_mag = 0;
 
+    J_p = 0;
+    J_q = 0;
+    J_r = 0;
+
+    p_norm = 0;
+    q_norm = 0;
+    r_norm = 0;
+
+    rfc_counter = 0;
+
     #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 
     for (i=0; i<4; i++)
@@ -46,6 +56,10 @@ void Copter::ftc_init()
 // This function should update both Teensy and Pixhawk with FTC-related data
 void Copter::ftc_exe()
 {
+
+    /// execute FDD algorithm
+    fdd_exe();
+
     #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
         int i;
         int j;
@@ -155,11 +169,68 @@ void Copter::ftc_exe()
 
 
     #else
-        // collect Q_matrix data via SPI bus
+        // collect Q_matrix data (F_mag, F_loc and Q_rank) via SPI bus
         TeensySPI_update();
     #endif
 
     rfc_exe();
+}
+
+void Copter::fdd_exe()
+{
+    /// Introduce fault based on the inertial speed - This is controlled by RFC
+    if ((inertial_nav.get_velocity_xy() > 300) && (J_r < 3.5) && (!start_rfc)) // 3 m/s
+    {
+        /// Fault emulation initialized
+        motors.set_fault_state(0); //randNum);  // Fault #1 on any/all motors
+
+        /// Fault injection started...
+        if (inertial_nav.get_velocity_xy() > 500) // 5m/s
+        {
+            motors.set_perc_loss(0.6);
+            motors.set_fault_type(1); // 0 - Thrust loss 1 - Slippage condition
+        }
+
+        /// Fault identification activation - ONLY in AUTO mode
+        if (( control_mode == AUTO))
+        {
+            /*	mode    Dt_in  Dt_out D_step  Amp     Rotor   NumOfRotors       Repeat	Dt_repeat */
+            motors.set_sysid_state(3,   100,    100,    100,    1.10,   0,      sysid_num_motor,  1,      1200);
+            sysid_active_rotor = motors.get_rotor_num();
+            sysid_man_flag = motors.get_man_state();
+
+            // This is a debug to see how how many values the NN has to learn with vs what's been logged
+            if (sysid_man_flag)
+            {
+                sysid_counter++;
+            }
+            else
+            {
+                sysid_counter = 0;
+            }
+
+        }
+        else
+        {
+            motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
+            sysid_counter = 0;
+        }
+
+    }
+    else{
+        /// Fault emulation
+        if (!start_rfc)
+        {
+            motors.set_fault_state(0);
+            motors.set_fault_type(0);
+            motors.set_perc_loss(0.0);
+        }
+
+        /// Fault identification - stopped
+        motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
+        sysid_counter = 0;
+    }
+
 }
 
 
@@ -206,12 +277,17 @@ void Copter::rfc_init()
 
 void Copter::rfc_exe()
 {
+
+    // float amp = 0.5; // amplitude for Extremum sinusoidal input
     float p_meas;
     float q_meas;
     float r_meas;
     float p_cmd;
     float q_cmd;
     float r_cmd;
+
+    //Vector3f cmdAng = attitude_control.get_att_target_euler_cd();
+    //wp_nav.get_roll these are the values used in AUTO mode to set euler angle command. These should be manipulated jusr like sys-id maneuvers
 
     p_meas = ins.get_gyro(0).x;
     q_meas = ins.get_gyro(0).y;
@@ -221,19 +297,57 @@ void Copter::rfc_exe()
     q_cmd = attitude_control.get_rate_pitch_pid().get_pid_info().desired;
     r_cmd = attitude_control.get_rate_yaw_pid().get_pid_info().desired;
 
-    /// compute Ojective function using error and integration timestep
-    if (sysid_man_flag)
+    /// start reconfiguration once FDD has located fault
+    if (Q_rank >= 2)
     {
         start_rfc = 1;
     }
 
-    // execute the cost function once the sys_id flag is LOW
-    if ((start_rfc) && (sysid_man_flag == 0))
+
+    /// Enable reconfigurable control ONLY after FDD has begun
+    if (start_rfc)
     {
-        J_the = J_the + (powf(p_meas - p_cmd,2) + powf(q_meas - q_cmd,2) + powf(r_meas - r_cmd,2))*G_Dt;
+        if (sysid_man_flag == 0)
+        {
+            rfc_counter++;
+        }
+
+        if ((p_norm < 1e-3) && (rfc_counter == 50)) // replace p_norm with std-deviation
+        {
+            p_norm = (float)sqrtf(pow(p_cmd,2));
+            q_norm = (float)sqrtf(pow(q_cmd,2));
+            r_norm = (float)sqrtf(pow(r_cmd,2));
+        }
+
+        // execute the cost function once the sys_id flag is LOW and counter has exceeded
+        if ((sysid_man_flag == 0) && (rfc_counter > 50) && (rfc_counter < 600))
+        {
+            J_the = J_the + (powf(p_meas - p_cmd,2) + powf(q_meas - q_cmd,2) + powf(r_meas - r_cmd,2))*G_Dt;
+            J_p = powf(p_meas/p_norm - p_cmd/p_norm,2)*G_Dt;
+            J_q = powf(q_meas/q_norm - q_cmd/q_norm,2)*G_Dt;
+            J_r = powf(r_meas/r_norm - r_cmd/r_norm,2)*G_Dt;
+        }
+
+        if (sysid_man_flag)
+        {
+            J_the = 0;
+
+            J_p = 0;
+            J_q = 0;
+            J_r = 0;
+
+            p_norm = 0;
+            q_norm = 0;
+            r_norm = 0;
+
+            rfc_counter = 0;
+        }
+
+        /// start extremum seeking control during FDD
+        if ((Q_rank >= 2) && (sysid_man_flag))
+        {
+            // enter code
+        }
     }
-    else
-    {
-        // compute the actuation gain values based on the FDD has concluded.
-    }
+
 }

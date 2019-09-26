@@ -84,7 +84,7 @@ public:
     void                set_sysid_state(uint8_t mode, uint16_t Dt_in,
                                         uint16_t Dt_out, uint16_t Dt_step, float Amp,
                                         uint8_t rotor_loc, uint8_t num_rotor, uint8_t repeat, uint16_t Dt_rep);
-
+    void                get_rfc_gain(float *gain_vec);
     uint16_t            get_sysid_state() const { return _sysid_mode; }
     uint8_t             get_man_state() const { return _man_flag; }
 
@@ -167,9 +167,13 @@ protected:
     // motor system identification execution
     void sysid_exe(const float *cur_mot_values, float *new_mot_values);
 
+    // motor control reconfiguration
+    void sysrfc_exe(const float *cur_mot_values, float *new_mot_values);
+
     // motor fault emulation functions
     void                ini_servo_fault(void);
     float               exe_servo_fault(float input);
+    void                ini_rfc_gain(void);
 
     // update the throttle input filter
     virtual void        update_throttle_filter() = 0;
@@ -257,6 +261,7 @@ protected:
     sysid_rep           _sysid_repeat;
     uint16_t            _sysid_dtrep;
 
+    float               _rfc_gain[AP_MOTORS_MAX_NUM_MOTORS]; // rfc gain values on each actuator output
     float               _hold_motor[AP_MOTORS_MAX_NUM_MOTORS];
     uint8_t             _hold_val_flag = 0;
 

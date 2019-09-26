@@ -77,5 +77,6 @@ protected:
     float               _yaw_factor[AP_MOTORS_MAX_NUM_MOTORS];  // each motors contribution to yaw (normally 1 or -1)
     float               _thrust_rpyt_out[AP_MOTORS_MAX_NUM_MOTORS]; // combined roll, pitch, yaw and throttle outputs to motors in 0~1 range
     float               _thrust_sysid[AP_MOTORS_MAX_NUM_MOTORS]; // system identification placeholders.
+    float               _thrust_sysrfc[AP_MOTORS_MAX_NUM_MOTORS]; // controller actuation reconfiguration placeholders.
     uint8_t             _test_order[AP_MOTORS_MAX_NUM_MOTORS];  // order of the motors in the test sequence
 };
