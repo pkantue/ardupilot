@@ -23,7 +23,7 @@ const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 Copter::Copter(void) :
     DataFlash{FIRMWARE_STRING},
     flight_modes(&g.flight_mode1),
-    mission(ahrs, 
+    mission(ahrs,
             FUNCTOR_BIND_MEMBER(&Copter::start_command, bool, const AP_Mission::Mission_Command &),
             FUNCTOR_BIND_MEMBER(&Copter::verify_command_callback, bool, const AP_Mission::Mission_Command &),
             FUNCTOR_BIND_MEMBER(&Copter::exit_mission, void)),
@@ -89,6 +89,7 @@ Copter::Copter(void) :
     sysid_active_rotor(0),
     start_rfc(0),
     J_the(0),
+    rfc_man(0),
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     start_fdd(0),
 #endif // CONFIG_HAL_BOARD

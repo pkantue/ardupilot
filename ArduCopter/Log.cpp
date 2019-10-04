@@ -819,12 +819,12 @@ void Copter::Log_Write_FTC(void)
         LOG_PACKET_HEADER_INIT(LOG_FTC_MSG),
         time_us         : AP_HAL::micros64(),
         placeholder1    : J_the,
-        placeholder2    : J_p,
-        placeholder3    : J_q,
-        placeholder4    : J_r,
-        placeholder5    : p_norm,
-        placeholder6    : q_norm,
-        placeholder7    : r_norm,
+        placeholder2    : p_mean,
+        placeholder3    : q_mean,
+        placeholder4    : r_mean,
+        placeholder5    : p_std,
+        placeholder6    : q_std,
+        placeholder7    : r_std,
         placeholder8    : (float)Q_matrix[3][1]
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));

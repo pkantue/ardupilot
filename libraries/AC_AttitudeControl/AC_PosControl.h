@@ -291,6 +291,13 @@ public:
     // time_since_last_xy_update - returns time in seconds since the horizontal position controller was last run
     float time_since_last_xy_update() const;
 
+    // get command to override desired angles
+    void set_rfc_cmd(uint8_t cmd) { _cmd_rfc = cmd; }
+
+    /// get RFC lean angles commands
+    void set_rfc_roll(float val) { _roll_rfc = val; }
+    void set_rfc_pitch(float val) { _pitch_rfc = val; }
+
     static const struct AP_Param::GroupInfo var_info[];
 
 private:
@@ -367,6 +374,9 @@ private:
     void init_ekf_z_reset();
     void check_for_ekf_z_reset();
 
+    /// override target lean angles give RFC command
+    void override_lean_angles();
+
     // references to inertial nav and ahrs libraries
     const AP_AHRS&              _ahrs;
     const AP_InertialNav&       _inav;
@@ -402,6 +412,11 @@ private:
     // output from controller
     float       _roll_target;           // desired roll angle in centi-degrees calculated by position controller
     float       _pitch_target;          // desired roll pitch in centi-degrees calculated by position controller
+
+    // output from the RFC controller
+    uint8_t     _cmd_rfc;               // Command for step maneuvers calculated by the RFC controller
+    float       _roll_rfc;              // desired roll angle calculated by the RFC controller
+    float       _pitch_rfc;             // desired pitch angle calculated by the RFC controller
 
     // position controller internal variables
     Vector3f    _pos_target;            // target location in cm from home

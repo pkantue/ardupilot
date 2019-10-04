@@ -52,6 +52,9 @@ AC_PosControl::AC_PosControl(const AP_AHRS& ahrs, const AP_InertialNav& inav,
     _leash_up_z(POSCONTROL_LEASH_LENGTH_MIN),
     _roll_target(0.0f),
     _pitch_target(0.0f),
+    _cmd_rfc(0),
+    _roll_rfc(0.0f),
+    _pitch_rfc(0.0f),
     _alt_max(0.0f),
     _distance_to_target(0.0f),
     _accel_target_jerk_limited(0.0f,0.0f),
@@ -700,6 +703,9 @@ void AC_PosControl::update_xy_controller(xy_mode mode, float ekfNavVelGainScaler
 
     // run position controller's acceleration to lean angle step
     accel_to_lean_angles(dt, ekfNavVelGainScaler, use_althold_lean_angle);
+
+    //override target lean angles based on RFC command
+    override_lean_angles();
 }
 
 float AC_PosControl::time_since_last_xy_update() const
@@ -775,6 +781,9 @@ void AC_PosControl::update_vel_controller_xyz(float ekfNavVelGainScaler)
 
         // update xy update time
         _last_update_xy_ms = now;
+
+        //override target lean angles based on RFC command
+        override_lean_angles();
     }
 
     // update altitude target
@@ -1092,5 +1101,21 @@ void AC_PosControl::check_for_ekf_z_reset()
     if (reset_ms != _ekf_z_reset_ms) {
         shift_alt_target(-alt_shift * 100.0f);
         _ekf_z_reset_ms = reset_ms;
+    }
+}
+
+/// override target lean angles give RFC command
+void AC_PosControl::override_lean_angles()
+{
+    // override
+    if (_cmd_rfc)
+    {
+        _roll_target = _roll_rfc;
+        _pitch_target = _pitch_rfc;
+    }
+    else
+    {
+        _roll_rfc = _roll_target;
+        _pitch_rfc = _pitch_target;
     }
 }

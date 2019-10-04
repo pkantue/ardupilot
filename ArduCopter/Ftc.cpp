@@ -19,11 +19,21 @@ void Copter::ftc_init()
     J_q = 0;
     J_r = 0;
 
-    p_norm = 0;
-    q_norm = 0;
-    r_norm = 0;
+    p_mean = 0;
+    q_mean = 0;
+    r_mean = 0;
+
+    p_var = 0;
+    q_var = 0;
+    r_var = 0;
+
+    p_std = 0;
+    q_std = 0;
+    r_std = 0;
 
     rfc_counter = 0;
+    rfc_man = 0;
+    rfc_period = 0;
 
     #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 
@@ -42,6 +52,14 @@ void Copter::ftc_init()
         {
             Q_matrix[i][j] = 1;
         }
+    }
+
+    // zero initialize rfc streams
+    for (i=0; i<MAX_STREAM_PERIOD; i++)
+    {
+        rfc_pitch_str[i] = 0.0;
+        rfc_roll_str[i] = 0.0;
+        rfc_yaw_str[i] = 0.0;
     }
 
     #else
@@ -65,7 +83,6 @@ void Copter::ftc_exe()
         int j;
         float temp1 = 0.0;
         float num_var[4] = {0};
-
 
         if (sysid_man_flag)
         {
@@ -178,8 +195,11 @@ void Copter::ftc_exe()
 
 void Copter::fdd_exe()
 {
+    float r_meas = ins.get_gyro(0).z;
+    float r_cmd = attitude_control.get_rate_yaw_pid().get_pid_info().desired;
+
     /// Introduce fault based on the inertial speed - This is controlled by RFC
-    if ((inertial_nav.get_velocity_xy() > 300) && (J_r < 3.5) && (!start_rfc)) // 3 m/s
+    if ((inertial_nav.get_velocity_xy() > 300) && ( sqrtf(powf(r_meas - r_cmd,2)) < 3.5) && (!start_rfc)) // 3 m/s
     {
         /// Fault emulation initialized
         motors.set_fault_state(0); //randNum);  // Fault #1 on any/all motors
@@ -218,17 +238,15 @@ void Copter::fdd_exe()
 
     }
     else{
-        /// Fault emulation
-        if (!start_rfc)
-        {
-            motors.set_fault_state(0);
-            motors.set_fault_type(0);
-            motors.set_perc_loss(0.0);
-        }
+
+        //motors.set_fault_state(0);
+        //motors.set_fault_type(0);
+        //motors.set_perc_loss(0.0);
 
         /// Fault identification - stopped
         motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
         sysid_counter = 0;
+        sysid_man_flag = 0;
     }
 
 }
@@ -278,7 +296,7 @@ void Copter::rfc_init()
 void Copter::rfc_exe()
 {
 
-    // float amp = 0.5; // amplitude for Extremum sinusoidal input
+    float amp = 0.8; // amplitude for Extremum sinusoidal input
     float p_meas;
     float q_meas;
     float r_meas;
@@ -286,68 +304,161 @@ void Copter::rfc_exe()
     float q_cmd;
     float r_cmd;
 
+    float roll_cmd;
+    float pitch_cmd;
+
+    float delt_p;
+    float delt_q;
+    float delt_r;
+
     //Vector3f cmdAng = attitude_control.get_att_target_euler_cd();
     //wp_nav.get_roll these are the values used in AUTO mode to set euler angle command. These should be manipulated jusr like sys-id maneuvers
 
-    p_meas = ins.get_gyro(0).x;
-    q_meas = ins.get_gyro(0).y;
-    r_meas = ins.get_gyro(0).z;
+    p_meas = (float)ahrs.roll_sensor/100.0f; //ins.get_gyro(0).x;
+    q_meas = (float)ahrs.pitch_sensor/100.0f; //ins.get_gyro(0).y;
+    r_meas = (float)ahrs.yaw_sensor/100.0f; //ins.get_gyro(0).z;
 
-    p_cmd = attitude_control.get_rate_roll_pid().get_pid_info().desired; /// to be checked with SITL data on the sign
-    q_cmd = attitude_control.get_rate_pitch_pid().get_pid_info().desired;
-    r_cmd = attitude_control.get_rate_yaw_pid().get_pid_info().desired;
+    p_cmd = (float)wp_nav.get_roll()/100.0f; // attitude_control.get_rate_roll_pid().get_pid_info().desired; /// to be checked with SITL data on the sign
+    q_cmd = (float)wp_nav.get_pitch()/100.0f; //attitude_control.get_rate_pitch_pid().get_pid_info().desired;
+    r_cmd = (float)wp_nav.get_yaw()/100.0f; //attitude_control.get_rate_yaw_pid().get_pid_info().desired;
+
+    /// window created as a circular buffer
+    uint8_t ndx = rfc_period % MAX_STREAM_PERIOD;
 
     /// start reconfiguration once FDD has located fault
     if (Q_rank >= 2)
     {
         start_rfc = 1;
+
+        /// update increment
+        rfc_period++;
     }
 
+    /// get old values to be removed from statistics
+
+    float p_meas1 = rfc_roll_str[ndx];
+    float q_meas1 = rfc_pitch_str[ndx];
+    float r_meas1 = rfc_yaw_str[ndx];
+
+    float p_mean1 = p_mean;
+    float q_mean1 = q_mean;
+    float r_mean1 = r_mean;
+
+    /// replace old value with new observation
+    rfc_roll_str[ndx] = p_meas;
+    rfc_pitch_str[ndx] = q_meas;
+    rfc_yaw_str[ndx] = r_meas;
+
+    /// Collect data for the RFC activation of ES logic
+    if ((start_rfc) && (rfc_period <= MAX_STREAM_PERIOD))
+    {
+        // compute mean and variance and deviation - roll
+        delt_p = p_meas - p_mean1;
+        p_mean += delt_p/(float)rfc_period;
+        p_var += delt_p*(p_meas - p_mean);
+        if (p_var >= 0.0){p_std = sqrtf(p_var/(float)rfc_period);}
+
+        // compute mean and variance and deviation - pitch
+        delt_q = q_meas - q_mean1;
+        q_mean += delt_q/(float)rfc_period;
+        q_var += delt_q*(q_meas - q_mean);
+        if (q_var >= 0.0){q_std = sqrtf(q_var/(float)rfc_period);}
+
+        // compute mean and variance and deviation - yaw
+        delt_r = r_meas - r_mean1;
+        r_mean += delt_r/(float)rfc_period;
+        r_var += delt_r*(r_meas - r_mean);
+        if (r_var >= 0.0){r_std = sqrtf(r_var/(float)rfc_period);}
+    }
+    else if (start_rfc) // reset period and store first values
+    {
+        // compute mean and variance and deviation - roll
+
+        delt_p = p_meas - p_meas1;
+        p_mean += delt_p/(float)MAX_STREAM_PERIOD;
+        p_var += delt_p*((p_meas - p_mean) + (p_meas1 - p_mean1));
+        if (p_var >= 0.0){p_std = sqrtf(p_var/(float)MAX_STREAM_PERIOD);}
+
+        // compute mean and variance and deviation - pitch
+        delt_q = q_meas - q_meas1;
+        q_mean += delt_q/(float)MAX_STREAM_PERIOD;
+        q_var += delt_q*((q_meas - q_mean) + (q_meas1 - q_mean1));
+        if (q_var >= 0.0){q_std = sqrtf(q_var/(float)MAX_STREAM_PERIOD);}
+
+        // compute mean and variance and deviation - yaw
+        delt_r = r_meas - r_meas1;
+        r_mean += delt_r/(float)MAX_STREAM_PERIOD;
+        r_var += delt_r*((r_meas - r_mean) + (r_meas1 - r_mean1));
+        if (r_var >= 0.0){r_std = sqrtf(r_var/(float)MAX_STREAM_PERIOD);}
+
+    }
 
     /// Enable reconfigurable control ONLY after FDD has begun
     if (start_rfc)
     {
-        if (sysid_man_flag == 0)
+        if (!rfc_man)
         {
+            /// stability condition
+            if ((p_std < 0.02) && (q_std < 0.02) && (r_std < 0.02))
+            {
+                rfc_counter++;
+            }
+            else /// reset if continous condition fails
+            {
+                rfc_counter = 0;
+            }
+        }
+        else{
             rfc_counter++;
         }
 
-        if ((p_norm < 1e-3) && (rfc_counter == 50)) // replace p_norm with std-deviation
+        /// only do this once
+        if (rfc_counter == 50)
         {
-            p_norm = (float)sqrtf(pow(p_cmd,2));
-            q_norm = (float)sqrtf(pow(q_cmd,2));
-            r_norm = (float)sqrtf(pow(r_cmd,2));
+            /// retrieve target lean angles values
+            roll_cmd = (float)wp_nav.get_roll();
+            pitch_cmd = (float)wp_nav.get_pitch();
+
+            /// construct step commands
+            wp_nav.set_rfc_roll(amp*roll_cmd);
+            wp_nav.set_rfc_pitch(amp*pitch_cmd);
+
+            /// start RFC maneuver
+            rfc_man = 1;
+
+            /// engage RFC commands
+            wp_nav.set_rfc_cmd(rfc_man);
         }
 
         // execute the cost function once the sys_id flag is LOW and counter has exceeded
-        if ((sysid_man_flag == 0) && (rfc_counter > 50) && (rfc_counter < 600))
+        if ((rfc_counter > 50) && (rfc_counter < 600))
         {
             J_the = J_the + (powf(p_meas - p_cmd,2) + powf(q_meas - q_cmd,2) + powf(r_meas - r_cmd,2))*G_Dt;
-            J_p = powf(p_meas/p_norm - p_cmd/p_norm,2)*G_Dt;
-            J_q = powf(q_meas/q_norm - q_cmd/q_norm,2)*G_Dt;
-            J_r = powf(r_meas/r_norm - r_cmd/r_norm,2)*G_Dt;
+            J_p = powf(p_meas - p_cmd,2)*G_Dt;
+            J_q = powf(q_meas - q_cmd,2)*G_Dt;
+            J_r = powf(r_meas - r_cmd,2)*G_Dt;
         }
 
-        if (sysid_man_flag)
+        if (rfc_counter > 600)
         {
+            /// reset RFC conditions
+            wp_nav.set_rfc_cmd(0);
+
             J_the = 0;
 
             J_p = 0;
             J_q = 0;
             J_r = 0;
-
-            p_norm = 0;
-            q_norm = 0;
-            r_norm = 0;
-
-            rfc_counter = 0;
         }
 
-        /// start extremum seeking control during FDD
-        if ((Q_rank >= 2) && (sysid_man_flag))
+        /// reset maneuver
+        if (rfc_counter > 40000)
         {
-            // enter code
+            rfc_counter = 0;
+            rfc_man = 0;
         }
-    }
 
+        /// compute objective function modulation
+        // adjust control signal sinusoidal
+    }
 }

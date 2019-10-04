@@ -242,6 +242,11 @@ public:
     int32_t get_roll() const { return _pos_control.get_roll(); }
     int32_t get_pitch() const { return _pos_control.get_pitch(); }
 
+    /// RFC functions
+    void set_rfc_cmd(uint8_t cmd) { _pos_control.set_rfc_cmd(cmd); }
+    void set_rfc_roll(float val) { _pos_control.set_rfc_roll(val); }
+    void set_rfc_pitch(float val) { _pos_control.set_rfc_pitch(val); }
+
     /// get_desired_alt - get desired altitude (in cm above home) from loiter or wp controller which should be fed into throttle controller
     float get_desired_alt() const { return _pos_control.get_alt_target(); }
 

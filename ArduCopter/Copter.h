@@ -293,7 +293,7 @@ private:
 
     // altitude below which we do no navigation in auto takeoff
     float auto_takeoff_no_nav_alt_cm;
-    
+
     RCMapper rcmap;
 
     // board specific config
@@ -560,8 +560,8 @@ private:
     AP_Rally_Copter rally;
 #endif
 
-    // RSSI 
-    AP_RSSI rssi;      
+    // RSSI
+    AP_RSSI rssi;
 
     // Crop Sprayer
 #if SPRAYER == ENABLED
@@ -611,7 +611,7 @@ private:
 
     // last valid RC input time
     uint32_t last_radio_update_ms;
-    
+
     // Top-level logic
     // setup the var_info table
     AP_Param param_loader;
@@ -656,13 +656,30 @@ private:
     uint8_t F_mag;  // fault magnitude
     uint8_t Q_rank; // TDOA matrix rank
     uint16_t rfc_counter = 0; // counter before RFC begins computing objective functions
+    uint8_t rfc_man = 0; // RFC maneuver start flag
+
+    #define MAX_STREAM_PERIOD 100
 
     float J_p = 0;
     float J_q = 0;
     float J_r = 0;
-    float p_norm = 0;
-    float q_norm = 0;
-    float r_norm = 0;
+
+    float p_std = 0;
+    float q_std = 0;
+    float r_std = 0;
+
+    float p_var = 0;
+    float q_var = 0;
+    float r_var = 0;
+
+    float p_mean = 0;
+    float q_mean = 0;
+    float r_mean = 0;
+
+    uint32_t rfc_period = 0;
+    float rfc_pitch_str[MAX_STREAM_PERIOD];
+    float rfc_roll_str[MAX_STREAM_PERIOD];
+    float rfc_yaw_str[MAX_STREAM_PERIOD];
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 
