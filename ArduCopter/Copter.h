@@ -657,8 +657,13 @@ private:
     uint8_t Q_rank; // TDOA matrix rank
     uint16_t rfc_counter = 0; // counter before RFC begins computing objective functions
     uint8_t rfc_man = 0; // RFC maneuver start flag
+    float roll_cmd;     // roll step command for objective function generation
+    float pitch_cmd;    // pitch steo command for objective function generation
+    float rfc_speed;    // speed at which the maneuver started at
+    float rfc_speed1;   // previous value of speed at which the maneuver started at
 
     #define MAX_STREAM_PERIOD 100
+    #define MAX_NUMBER_ROTORS 8
 
     float J_p = 0;
     float J_q = 0;
@@ -680,6 +685,26 @@ private:
     float rfc_pitch_str[MAX_STREAM_PERIOD];
     float rfc_roll_str[MAX_STREAM_PERIOD];
     float rfc_yaw_str[MAX_STREAM_PERIOD];
+    float rfc_gains[MAX_NUMBER_ROTORS];
+
+    // filter dynamics - Extremum logic
+    struct rfc_filter{
+        float a[2];
+        float b[2];
+        float X[2];
+        float dX[2];
+        float dX1[2];
+        float in;
+        float out;
+        uint8_t init_state;
+    };
+
+    void exe_rfc_filter(struct rfc_filter *filter, float input, float dt); // execution of filter
+
+    rfc_filter ES_LPF;
+    rfc_filter ES_HPF;
+    float filter_dtime = 0; // filter sample time
+
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 

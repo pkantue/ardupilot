@@ -4,6 +4,8 @@
 AP_HAL::OwnPtr<AP_HAL::SPIDevice> _teensy;
 
 void check_variable(void);
+#define MIN_PERIOD 50
+#define MAX_PERIOD 200
 
 /* Initialize the FTC functions  */
 void Copter::ftc_init()
@@ -30,10 +32,6 @@ void Copter::ftc_init()
     p_std = 0;
     q_std = 0;
     r_std = 0;
-
-    rfc_counter = 0;
-    rfc_man = 0;
-    rfc_period = 0;
 
     #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 
@@ -97,7 +95,7 @@ void Copter::ftc_exe()
         {
             init_counter++;
 
-            if (init_counter > 5) // number of executions until network has initialized ~ 5*2500 = 12500 ms
+            if (init_counter > 5) /// number of executions until network has initialized ~ 5*2500 = 12500 us
             {
                 NN_init[sysid_active_rotor] = 1;
             }
@@ -108,7 +106,7 @@ void Copter::ftc_exe()
         {
             train_counter++; // start training network
 
-            if (train_counter > 180) // number of executions until network has trained ~
+            if (train_counter > 180) /// number of executions until network has trained ~ 180*2500 = 450000 us
             {
                 NN_train[sysid_active_rotor] = 1;
                 train_counter = 0;
@@ -121,7 +119,7 @@ void Copter::ftc_exe()
         {
             predict_counter++; // start prediction network
 
-            if (predict_counter > 5) // number of executions until network has predicted
+            if (predict_counter > 5) /// number of executions until network has predicted ~ 5*2500 = 12500 us
             {
                 NN_predict[sysid_active_rotor] = 1;
                 predict_counter = 0;
@@ -186,20 +184,21 @@ void Copter::ftc_exe()
 
 
     #else
-        // collect Q_matrix data (F_mag, F_loc and Q_rank) via SPI bus
+        /// collect Q_matrix data (F_mag, F_loc and Q_rank) via SPI bus
         TeensySPI_update();
     #endif
 
+    /// Execute the reconfigurable controller
     rfc_exe();
 }
 
 void Copter::fdd_exe()
 {
-    float r_meas = ins.get_gyro(0).z;
-    float r_cmd = attitude_control.get_rate_yaw_pid().get_pid_info().desired;
+    float yaw_rate_meas = ins.get_gyro(0).z;
+    float yaw_rate_cmd = attitude_control.get_rate_yaw_pid().get_pid_info().desired;
 
     /// Introduce fault based on the inertial speed - This is controlled by RFC
-    if ((inertial_nav.get_velocity_xy() > 300) && ( sqrtf(powf(r_meas - r_cmd,2)) < 3.5) && (!start_rfc)) // 3 m/s
+    if ((inertial_nav.get_velocity_xy() > 300) && ( sqrtf(powf(yaw_rate_meas - yaw_rate_cmd,2)) < 3.5) && (!start_rfc)) // 3 m/s
     {
         /// Fault emulation initialized
         motors.set_fault_state(0); //randNum);  // Fault #1 on any/all motors
@@ -290,13 +289,66 @@ void Copter::TeensySPI_update()
 
 void Copter::rfc_init()
 {
+    int i;
+
     J_the = 0;
+
+    rfc_counter = 0;
+    rfc_man = 0;
+    rfc_period = 0;
+
+    roll_cmd = 0;
+    pitch_cmd = 0;
+
+    rfc_speed = 0;
+    rfc_speed1 = 0;
+
+    for(i=0;i<MAX_NUMBER_ROTORS;i++)
+    {
+        rfc_gains[i] = 1.0;
+    }
+
+    /// initialize filters - LPF = 2/(s+2)
+    ES_LPF.a[0] = 1; // denominator
+    ES_LPF.a[1] = 2;
+
+    ES_LPF.b[0] = 0; // numerator
+    ES_LPF.b[1] = 2;
+
+    for (i=0; i < 2; i++){
+        ES_LPF.X[i] = 0;
+        ES_LPF.dX[i] = 0;
+        ES_LPF.dX1[i] = 0;
+    }
+
+    ES_LPF.in = 0;
+    ES_LPF.out = 0;
+    ES_LPF.init_state = 0;
+
+    /// initialize filters - HPF = s/(s+2)
+    ES_HPF.a[0] = 1; // denominator
+    ES_HPF.a[1] = 2;
+
+    ES_HPF.b[0] = 1; // numerator
+    ES_HPF.b[1] = 0;
+
+    for (i=0; i < 2; i++){
+        ES_HPF.X[i] = 0;
+        ES_HPF.dX[i] = 0;
+        ES_HPF.dX1[i] = 0;
+    }
+
+    ES_HPF.in = 0;
+    ES_HPF.out = 0;
+    ES_HPF.init_state = 0;
+
+    filter_dtime = 0;
 }
 
 void Copter::rfc_exe()
 {
 
-    float amp = 0.8; // amplitude for Extremum sinusoidal input
+    float amp = 0.7; // amplitude for objective function step command
     float p_meas;
     float q_meas;
     float r_meas;
@@ -304,12 +356,12 @@ void Copter::rfc_exe()
     float q_cmd;
     float r_cmd;
 
-    float roll_cmd;
-    float pitch_cmd;
-
     float delt_p;
     float delt_q;
     float delt_r;
+
+    int i;
+    float delt_gain;
 
     //Vector3f cmdAng = attitude_control.get_att_target_euler_cd();
     //wp_nav.get_roll these are the values used in AUTO mode to set euler angle command. These should be manipulated jusr like sys-id maneuvers
@@ -329,6 +381,17 @@ void Copter::rfc_exe()
     if (Q_rank >= 2)
     {
         start_rfc = 1;
+
+        delt_gain = 0.1;
+
+        for (i=0; i<MAX_NUMBER_ROTORS; i++)
+        {
+            if (i == F_loc){rfc_gains[i] = 1 - delt_gain;}
+            else {rfc_gains[i] = 1 + delt_gain;}
+        }
+
+        /// send RFC control allocation commands
+        motors.get_rfc_gain(rfc_gains);
 
         /// update increment
         rfc_period++;
@@ -399,7 +462,7 @@ void Copter::rfc_exe()
         if (!rfc_man)
         {
             /// stability condition
-            if ((p_std < 0.02) && (q_std < 0.02) && (r_std < 0.02))
+            if ((p_std < 0.02) && (q_std < 0.02) && (r_std < 0.05))
             {
                 rfc_counter++;
             }
@@ -413,35 +476,46 @@ void Copter::rfc_exe()
         }
 
         /// only do this once
-        if (rfc_counter == 50)
+        if (rfc_counter == MIN_PERIOD)
         {
             /// retrieve target lean angles values
-            roll_cmd = (float)wp_nav.get_roll();
-            pitch_cmd = (float)wp_nav.get_pitch();
+            roll_cmd = amp*(float)wp_nav.get_roll();
+            pitch_cmd = amp*(float)wp_nav.get_pitch();
 
             /// construct step commands
-            wp_nav.set_rfc_roll(amp*roll_cmd);
-            wp_nav.set_rfc_pitch(amp*pitch_cmd);
+            wp_nav.set_rfc_roll(roll_cmd);
+            wp_nav.set_rfc_pitch(pitch_cmd);
 
             /// start RFC maneuver
             rfc_man = 1;
+
+            /// capture speed of RFC command
+            if (rfc_speed1 < 1){rfc_speed1 = rfc_speed;} // do it once
+
+            rfc_speed = gps.ground_speed();
 
             /// engage RFC commands
             wp_nav.set_rfc_cmd(rfc_man);
         }
 
         // execute the cost function once the sys_id flag is LOW and counter has exceeded
-        if ((rfc_counter > 50) && (rfc_counter < 600))
+        if ((rfc_counter > MIN_PERIOD) && (rfc_counter < MAX_PERIOD) && (rfc_speed > 0))
         {
-            J_the = J_the + (powf(p_meas - p_cmd,2) + powf(q_meas - q_cmd,2) + powf(r_meas - r_cmd,2))*G_Dt;
-            J_p = powf(p_meas - p_cmd,2)*G_Dt;
-            J_q = powf(q_meas - q_cmd,2)*G_Dt;
-            J_r = powf(r_meas - r_cmd,2)*G_Dt;
+            // J_the = J_the + (powf(p_meas - p_cmd,2) + powf(q_meas - q_cmd,2) + powf(r_meas - r_cmd,2))*G_Dt;
+            J_the = J_the + (rfc_speed1/rfc_speed)*(powf((p_meas - p_cmd),2) + powf((q_meas - q_cmd),2))*G_Dt;
+            J_p = J_p + (rfc_speed1/rfc_speed)*powf(p_meas - p_cmd,2)*G_Dt;
+            J_q = J_q + (rfc_speed1/rfc_speed)*powf(q_meas - q_cmd,2)*G_Dt;
+            J_r = J_r + (rfc_speed1/rfc_speed)*powf(r_meas - r_cmd,2)*G_Dt;
+
+            filter_dtime += G_Dt; // increment filter time
         }
 
-        if (rfc_counter > 600)
+        /// reset RFC conditions
+        if (rfc_counter == MAX_PERIOD)
         {
-            /// reset RFC conditions
+            /// compute filter output PRIOR to reset
+            exe_rfc_filter(&ES_HPF,J_the,filter_dtime);
+
             wp_nav.set_rfc_cmd(0);
 
             J_the = 0;
@@ -449,16 +523,74 @@ void Copter::rfc_exe()
             J_p = 0;
             J_q = 0;
             J_r = 0;
-        }
 
-        /// reset maneuver
-        if (rfc_counter > 40000)
-        {
             rfc_counter = 0;
             rfc_man = 0;
+            // rfc_speed = 0;
+            // rfc_speed1 = 0; they are needed for the objective function
+
+            /// reset filter sample time
+            filter_dtime = 0;
         }
 
         /// compute objective function modulation
         // adjust control signal sinusoidal
+
+        /// send RFC control allocation commands
+        motors.get_rfc_gain(rfc_gains);
+
+    }
+}
+
+void Copter::exe_rfc_filter(struct rfc_filter *filter, float input, float dt)
+{
+    float beta[2];
+
+    uint8_t n;
+    n = sizeof(filter->a) / sizeof(filter->a[0]);
+
+
+    for (int i=0; i < n; i++)
+    {
+        // beta = b - b(1)*a;
+        beta[i] = filter->b[i] - filter->b[0]*filter->a[i];
+    }
+
+    if (!filter->init_state)
+    {
+        // X(end) = u/beta(end);
+        filter->X[1] = input/beta[1];
+        filter->init_state = 1;
+    }
+
+    for (int i=1; i < n; i++)
+    {
+        if(i == 1)
+        {
+            filter->dX[i] = input;
+            for (int j=1; j < n; j++)
+            {
+                filter->dX[i] = filter->dX[i] - filter->a[j]*filter->X[j];
+            }
+        }
+        else
+        {
+            filter->dX[i] = filter->X[i - 1]; // state first derivative
+        }
+    }
+
+    // Feedthrough term
+    filter->out = filter->b[0]*input;
+
+    for (int i=1; i<n; i++)
+    {
+        filter->out += beta[i]*filter->X[i];
+    }
+
+    // Update the state vector
+    for (int i=1; i < n; i++)
+    {
+        filter->X[i] += (float)0.5*(filter->dX[i] + filter->dX1[i])*(dt);
+        filter->dX1[i] = filter->dX[i];
     }
 }

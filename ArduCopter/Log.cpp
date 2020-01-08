@@ -362,7 +362,7 @@ void Copter::Log_Write_Performance()
         num_long_running : perf_info_get_num_long_running(),
         num_loops        : perf_info_get_num_loops(),
         max_time         : perf_info_get_max_time(),
-        pm_test          : sysid_counter, // Mod for debug purposes ONLY
+        pm_test          : (int16_t)sysid_counter, // Mod for debug purposes ONLY
         i2c_lockup_count : sysid_man_flag,
         ins_error_count  : sysid_active_rotor,
         log_dropped      : fault_counter, // wp_distance or // DataFlash.num_dropped() - perf_info_get_num_dropped(),
@@ -819,13 +819,13 @@ void Copter::Log_Write_FTC(void)
         LOG_PACKET_HEADER_INIT(LOG_FTC_MSG),
         time_us         : AP_HAL::micros64(),
         placeholder1    : J_the,
-        placeholder2    : p_mean,
-        placeholder3    : q_mean,
-        placeholder4    : r_mean,
-        placeholder5    : p_std,
-        placeholder6    : q_std,
+        placeholder2    : ES_HPF.out,
+        placeholder3    : filter_dtime,
+        placeholder4    : (float)Q_rank,
+        placeholder5    : rfc_gains[0],
+        placeholder6    : rfc_gains[1],
         placeholder7    : r_std,
-        placeholder8    : (float)Q_matrix[3][1]
+        placeholder8    : rfc_speed
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
