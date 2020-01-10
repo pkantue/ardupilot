@@ -820,12 +820,12 @@ void Copter::Log_Write_FTC(void)
         time_us         : AP_HAL::micros64(),
         placeholder1    : J_the,
         placeholder2    : ES_HPF.out,
-        placeholder3    : filter_dtime,
-        placeholder4    : (float)Q_rank,
+        placeholder3    : ES_LPF.out,
+        placeholder4    : delt_gain,
         placeholder5    : rfc_gains[0],
         placeholder6    : rfc_gains[1],
-        placeholder7    : r_std,
-        placeholder8    : rfc_speed
+        placeholder7    : rfc_gains[2],
+        placeholder8    : int_hold
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }

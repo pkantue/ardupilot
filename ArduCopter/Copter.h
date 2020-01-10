@@ -651,6 +651,7 @@ private:
     void rfc_exe(void); // This with FDD forms part of the FTC algorithm
 
     float J_the; // objective function to be minimized
+    float J_the_hold; // holding value of the objective function
     uint8_t start_rfc; // start the reconfiguration once sys_id has started
     uint8_t F_loc;  // fault location
     uint8_t F_mag;  // fault magnitude
@@ -687,6 +688,10 @@ private:
     float rfc_yaw_str[MAX_STREAM_PERIOD];
     float rfc_gains[MAX_NUMBER_ROTORS];
 
+    int16_t pert_sign = 1; // This is the pertubation for the objective function
+    float int_hold = 0; // holding value of the integrated LPF output
+    float delt_gain; // Extremum parameter for computing motor control allocation
+
     // filter dynamics - Extremum logic
     struct rfc_filter{
         float a[2];
@@ -699,6 +704,7 @@ private:
         uint8_t init_state;
     };
 
+    void compute_geom_sides(float delta, float gamma, float *a_side, float *c_side);
     void exe_rfc_filter(struct rfc_filter *filter, float input, float dt); // execution of filter
 
     rfc_filter ES_LPF;
