@@ -650,25 +650,24 @@ private:
     void rfc_init(void); // Initialization for the reconfigurable PID controller
     void rfc_exe(void); // This with FDD forms part of the FTC algorithm
 
-    float J_the; // objective function to be minimized
-    float J_the_hold; // holding value of the objective function
-    uint8_t start_rfc; // start the reconfiguration once sys_id has started
-    uint8_t F_loc;  // fault location
-    uint8_t F_mag;  // fault magnitude
-    uint8_t Q_rank; // TDOA matrix rank
+    float J_the = 0; // objective function to be minimized - inner loop tracking
+    float J_trans = 0; // objective function of the outer-loop tracking
+    float J_the_hold = 0; // holding value of the objective function
+    uint16_t J_the_counter = 0; // Objective function counter - inner loop
+    uint8_t start_rfc = 0; // start the reconfiguration once sys_id has started
+    uint8_t F_loc = 0;  // fault location
+    uint8_t F_mag = 0;  // fault magnitude
+    uint8_t Q_rank = 0; // TDOA matrix rank
     uint16_t rfc_counter = 0; // counter before RFC begins computing objective functions
     uint8_t rfc_man = 0; // RFC maneuver start flag
-    float roll_cmd;     // roll step command for objective function generation
-    float pitch_cmd;    // pitch steo command for objective function generation
-    float rfc_speed;    // speed at which the maneuver started at
-    float rfc_speed1;   // previous value of speed at which the maneuver started at
+    uint8_t rfc_trans = 0; // Transition tracking (outer loop) start flag
+    float roll_cmd = 0;     // roll step command for objective function generation
+    float pitch_cmd = 0;    // pitch steo command for objective function generation
+    float rfc_speed = 0;    // speed at which the maneuver started at
+    float rfc_speed1 = 0;   // previous value of speed at which the maneuver started at
 
-    #define MAX_STREAM_PERIOD 100
+    #define MAX_STREAM_PERIOD 50
     #define MAX_NUMBER_ROTORS 8
-
-    float J_p = 0;
-    float J_q = 0;
-    float J_r = 0;
 
     float p_std = 0;
     float q_std = 0;
@@ -689,8 +688,10 @@ private:
     float rfc_gains[MAX_NUMBER_ROTORS];
 
     int16_t pert_sign = 1; // This is the pertubation for the objective function
+    uint8_t set_flag = 0; // set initial value of the ES contrller integrated value
     float int_hold = 0; // holding value of the integrated LPF output
-    float delt_gain; // Extremum parameter for computing motor control allocation
+    float delt_gain = 0; // Extremum parameter for computing motor control allocation
+    float delt_gain0 = 0; // initial value computed once after start_rfc flag goes high
 
     // filter dynamics - Extremum logic
     struct rfc_filter{
@@ -704,17 +705,18 @@ private:
         uint8_t init_state;
     };
 
-    void compute_geom_sides(float delta, float gamma, float *a_side, float *c_side);
+    void compute_geom_sides(float delta, float gamma, float *a_side, float *b_side);
     void exe_rfc_filter(struct rfc_filter *filter, float input, float dt); // execution of filter
 
     rfc_filter ES_LPF;
     rfc_filter ES_HPF;
-    float filter_dtime = 0; // filter sample time
+    rfc_filter INIT_LPF;
 
+    uint8_t HPF_settled = 0;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 
-    uint8_t start_fdd; // start the fdd
+    uint8_t update_matrix; // update the Q matrix and activate RFC mechanism
     uint8_t NN_init[4]; // NN initiation flag
     uint8_t NN_train[4]; // NN estimation flag
     uint8_t NN_predict[4]; // NN prediction flag
@@ -723,6 +725,7 @@ private:
     uint16_t init_counter = 0; // counter to emulate NN initialization
     uint16_t train_counter = 0; // counter to emulate NN prediction
     uint16_t predict_counter = 0; // counter to emulate NN prediction
+    float num_var[4];  // column variance of the Q matrix
 
 #endif // CONFIG_HAL_BOARD
 
@@ -730,6 +733,7 @@ private:
     void TeensySPI_start(void);
     void TeensySPI_update(void);
     void Log_Write_FTC(void);
+    void Log_Write_FDD(void);
 
     void compass_accumulate(void);
     void compass_cal_update(void);

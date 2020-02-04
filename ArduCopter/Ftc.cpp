@@ -6,10 +6,12 @@ AP_HAL::OwnPtr<AP_HAL::SPIDevice> _teensy;
 void check_variable(void);
 #define MIN_PERIOD 50
 #define MAX_PERIOD 200
-#define PERT_AMP 0.01f // pertubation amplitude
-#define ES_LOOP_GAIN 0.1f  // loop gain prior to signal modulation
-
-/* Initialize the FTC functions  */
+#define PERT_AMP 0.05f // pertubation amplitude for demodulation
+#define PERC_AMP 0.01f // percentage amplitude of the tuning parameter
+#define ES_LOOP_GAIN 0.01f  // loop gain prior to signal modulation
+#define HPF_INIT_THRES 0.02f // threshold of activating the feedback loop
+#define FTC_YAW_RATE_MAX 1.5f // threshold for FTC activation based on  yaw rate command (waypoint navigation)
+/* Initialize the FTC functions */
 void Copter::ftc_init()
 {
     int i;
@@ -18,10 +20,6 @@ void Copter::ftc_init()
     Q_rank = 0;
     F_loc = 0;
     F_mag = 0;
-
-    J_p = 0;
-    J_q = 0;
-    J_r = 0;
 
     p_mean = 0;
     q_mean = 0;
@@ -62,6 +60,11 @@ void Copter::ftc_init()
         rfc_yaw_str[i] = 0.0;
     }
 
+    for (i=0; i<4; i++)
+    {
+        num_var[i] = 0.0;
+    }
+
     #else
         // initiliaze the SPI bus
         TeensySPI_init();
@@ -82,12 +85,6 @@ void Copter::ftc_exe()
         int i;
         int j;
         float temp1 = 0.0;
-        float num_var[4] = {0};
-
-        if (sysid_man_flag)
-        {
-            start_fdd = 1;
-        }
 
         if (NN_sample[sysid_active_rotor] < 353)
         NN_sample[sysid_active_rotor] = sysid_counter;
@@ -132,25 +129,34 @@ void Copter::ftc_exe()
         {
             if ((sysid_active_rotor == 0) && (NN_predict[i]))
             {
-                Q_matrix[sysid_active_rotor][i] = -25;
-                if ((i+1) > Q_rank){Q_rank = i+1;}
+                Q_matrix[sysid_active_rotor][i] = -25 + (rand()%(3-0 + 1) + 0);
+                if ((i+1) > Q_rank){Q_rank = i+1; update_matrix = 1;}
             }
             else if ((i == 0) && (NN_predict[sysid_active_rotor]))
             {
-                Q_matrix[sysid_active_rotor][i] = 25;
-                if ((i+1) > Q_rank){Q_rank = i+1;}
+                Q_matrix[sysid_active_rotor][i] = 25 + (rand()%(3-0 + 1) + 0);
+                if ((i+1) > Q_rank){Q_rank = i+1; update_matrix = 1;}
             }
             else if ((NN_predict[sysid_active_rotor]) && (NN_predict[i]))
             {
                 Q_matrix[sysid_active_rotor][i] = 3;
-                if ((i+1) > Q_rank){Q_rank = i+1;}
+                if ((i+1) > Q_rank){Q_rank = i+1; update_matrix = 1;}
             }
+        }
 
+        /// only have Q_matrix updated IFF Q_rank >= 2 AND NOT full rank
+        /// This also prevents RFC activation in the protection of the division by zero
+        if ((Q_rank < 2) || (Q_rank >= 4))
+        {
+            update_matrix = 0;
         }
 
         // compute the Q_matrix variance
         if (sysid_num_motor > 0)
         {
+            /// zero variance to recomputation
+            for (i=0; i<sysid_num_motor; i++){ num_var[i] = 0.0;}
+
             for (i=0; i<sysid_num_motor; i++)
             {
                 for (j=0; j<sysid_num_motor; j++) // compute average across the column
@@ -184,7 +190,6 @@ void Copter::ftc_exe()
         // This is computed based on the rotor
         F_mag = abs((float)Q_matrix[F_loc][F_loc]); /// This is passed via SPI
 
-
     #else
         /// collect Q_matrix data (F_mag, F_loc and Q_rank) via SPI bus
         TeensySPI_update();
@@ -200,7 +205,7 @@ void Copter::fdd_exe()
     float yaw_rate_cmd = attitude_control.get_rate_yaw_pid().get_pid_info().desired;
 
     /// Introduce fault based on the inertial speed - This is controlled by RFC
-    if ((inertial_nav.get_velocity_xy() > 300) && ( sqrtf(powf(yaw_rate_meas - yaw_rate_cmd,2)) < 3.5) && (!start_rfc)) // 3 m/s
+    if ((inertial_nav.get_velocity_xy() > 300) && ( sqrtf(powf(yaw_rate_meas - yaw_rate_cmd,2)) < FTC_YAW_RATE_MAX) && (!start_rfc)) // 3 m/s
     {
         /// Fault emulation initialized
         motors.set_fault_state(0); //randNum);  // Fault #1 on any/all motors
@@ -208,7 +213,7 @@ void Copter::fdd_exe()
         /// Fault injection started...
         if (inertial_nav.get_velocity_xy() > 500) // 5m/s
         {
-            motors.set_perc_loss(0.6);
+            motors.set_perc_loss(0.85);
             motors.set_fault_type(1); // 0 - Thrust loss 1 - Slippage condition
         }
 
@@ -233,16 +238,21 @@ void Copter::fdd_exe()
         }
         else
         {
+            motors.set_fault_state(0);
+            motors.set_fault_type(0);
+            motors.set_perc_loss(0.0);
+
             motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
             sysid_counter = 0;
+            sysid_man_flag = 0;
         }
 
     }
     else{
 
-        //motors.set_fault_state(0);
-        //motors.set_fault_type(0);
-        //motors.set_perc_loss(0.0);
+        motors.set_fault_state(0);
+        motors.set_fault_type(0);
+        motors.set_perc_loss(0.0);
 
         /// Fault identification - stopped
         motors.set_sysid_state(0,0,0,0,0.0,0,sysid_num_motor,0,0);
@@ -294,11 +304,15 @@ void Copter::rfc_init()
     int i;
 
     J_the = 0;
+    J_trans = 0;
+
+    J_the_counter = 0;
 
     J_the_hold = 0;
 
     rfc_counter = 0;
     rfc_man = 0;
+    rfc_trans = 0;
     rfc_period = 0;
 
     roll_cmd = 0;
@@ -312,7 +326,7 @@ void Copter::rfc_init()
         rfc_gains[i] = 1.0;
     }
 
-    /// initialize filters - LPF = 4/(s+4)
+    /// initialize filters - ES_LPF = 4/(s+4)
     ES_LPF.a[0] = 1; // denominator
     ES_LPF.a[1] = 4;
 
@@ -329,7 +343,7 @@ void Copter::rfc_init()
     ES_LPF.out = 0;
     ES_LPF.init_state = 0;
 
-    /// initialize filters - HPF = s/(s+2)
+    /// initialize filters - ES_HPF = s/(s+2)
     ES_HPF.a[0] = 1; // denominator
     ES_HPF.a[1] = 2;
 
@@ -346,12 +360,28 @@ void Copter::rfc_init()
     ES_HPF.out = 0;
     ES_HPF.init_state = 0;
 
-    filter_dtime = 0;
+    /// initialize filters  INIT_LPF = 0.2/(s+0.2)
+    INIT_LPF.a[0] = 1; // denominator
+    INIT_LPF.a[1] = 0.2;
+
+    INIT_LPF.b[0] = 0; // numerator
+    INIT_LPF.b[1] = 0.2;
+
+    for (i=0; i < 2; i++){
+        INIT_LPF.X[i] = 0;
+        INIT_LPF.dX[i] = 0;
+        INIT_LPF.dX1[i] = 0;
+    }
+
+    INIT_LPF.in = 0;
+    INIT_LPF.out = 0;
+    INIT_LPF.init_state = 0;
+
+    set_flag = 0;
+
+    HPF_settled = 0; /// settling of HPF prior to LPF integration
 
     pert_sign = 1; // pertubation sign for stimulating objective function
-
-    delt_gain = 0;
-    int_hold = 0;
 }
 
 void Copter::rfc_exe()
@@ -363,7 +393,7 @@ void Copter::rfc_exe()
     float r_meas;
     float p_cmd;
     float q_cmd;
-    float r_cmd;
+    // float r_cmd;
 
     float delt_p;
     float delt_q;
@@ -375,8 +405,8 @@ void Copter::rfc_exe()
     /// holding values
     float aside0 = 0;
     float aside1 = 0;
-    float cside0 = 0;
-    float cside1 = 0;
+    float bside0 = 0;
+    float bside1 = 0;
 
     //Vector3f cmdAng = attitude_control.get_att_target_euler_cd();
     //wp_nav.get_roll these are the values used in AUTO mode to set euler angle command. These should be manipulated jusr like sys-id maneuvers
@@ -387,18 +417,83 @@ void Copter::rfc_exe()
 
     p_cmd = (float)wp_nav.get_roll()/100.0f; // attitude_control.get_rate_roll_pid().get_pid_info().desired; /// to be checked with SITL data on the sign
     q_cmd = (float)wp_nav.get_pitch()/100.0f; //attitude_control.get_rate_pitch_pid().get_pid_info().desired;
-    r_cmd = (float)wp_nav.get_yaw()/100.0f; //attitude_control.get_rate_yaw_pid().get_pid_info().desired;
+    // r_cmd = (float)wp_nav.get_yaw()/100.0f; //attitude_control.get_rate_yaw_pid().get_pid_info().desired;
 
     /// window created as a circular buffer
     uint8_t ndx = rfc_period % MAX_STREAM_PERIOD;
 
+    float yaw_rate_meas = ins.get_gyro(0).z;
+    float yaw_rate_cmd = attitude_control.get_rate_yaw_pid().get_pid_info().desired;
+
     /// start reconfiguration once FDD has located fault
-    if (Q_rank >= 2)
+    if (update_matrix || start_rfc)
     {
-        start_rfc = 1;
+        if (sqrtf(powf(yaw_rate_meas - yaw_rate_cmd,2)) < FTC_YAW_RATE_MAX)  /// Only if turning maneuvers have not been initiated.
+        {
+            start_rfc = 1;
+            update_matrix = 0; /// Reset and wait for FDD to learn and update Q_matrix
+        }
+        else
+        {
+            /// reset RFC module flag
+            start_rfc = 0;
+
+            /// initialize RFC module ONCE - using filter init state
+            if (ES_HPF.init_state)
+            {
+                rfc_init();
+            }
+        }
 
         /// update increment
         rfc_period++;
+
+        /// set iniation flag and initial control allocation values
+        /// This is based on fault magnitude and uncertainty on the Q_rank
+        if (!set_flag)
+        {
+            set_flag = 1;
+
+            /// compute scale direction due to pairing of motor spin direction
+            /// faulty motor odd number - reverse scaling of n+1 motor
+            /// faulty motor even number - reverse scaling of n-1 motor
+            if ((F_loc+1)%2 == 0){scale_dir = -1;}
+            else {scale_dir = 1;}
+
+            /// compute the geometric sides of affected rotor
+            /// The objective function parameter is updated in HPF has settled.
+
+            /// compute initial parameter value based on F_mag and Q_rank
+            delt_gain0 = 1 - expf(-F_mag*0.02/Q_rank); // watch out for division by zero!!
+
+            /// initialize the LPF
+            exe_rfc_filter(&INIT_LPF,delt_gain,G_Dt); /// Digital filter must always be initialized with a zero input
+
+            delt_gain = INIT_LPF.out;
+            delt_gain = constrain_float(delt_gain,0,0.5);
+
+            compute_geom_sides(1.5,delt_gain,&aside0,&bside0);
+            compute_geom_sides(1.5,delt_gain,&aside1,&bside1);
+
+            for (i=0; i<sysid_num_motor; i++)
+            {
+                if (i == F_loc)
+                {
+                    rfc_gains[i] = bside1/bside0; // This can remain unchanged given that's faulty
+                }
+                else if (i == F_loc + scale_dir)
+                {
+                    rfc_gains[i] = bside0/bside1;
+                }
+                else
+                {
+                    rfc_gains[i] = aside1/aside0;
+                }
+            }
+
+            /// send RFC control allocation commands - through a low-pass filter
+            motors.get_rfc_gain(rfc_gains);
+        }
     }
 
     /// get old values to be removed from statistics
@@ -464,7 +559,7 @@ void Copter::rfc_exe()
         if (!rfc_man)
         {
             /// stability condition
-            if ((p_std < 0.02) && (q_std < 0.02) && (r_std < 0.05))
+            if ((p_std < 0.1) && (q_std < 0.5) && (r_std < 0.1))
             {
                 rfc_counter++;
             }
@@ -491,6 +586,18 @@ void Copter::rfc_exe()
             /// start RFC maneuver
             rfc_man = 1;
 
+            /// stop of transition tracking
+            rfc_trans = 0;
+
+            /// compute the modulus of complete objective function
+            J_the_hold = sqrtf(powf(J_the - J_trans,2));
+
+            /// reset objective function - inner tracking loop
+            J_the = 0;
+
+            /// reset objective function - outer tracking loop
+            J_trans = 0;
+
             /// capture speed of RFC command
             if (rfc_speed1 < 1){rfc_speed1 = rfc_speed;} // do it once
 
@@ -499,51 +606,54 @@ void Copter::rfc_exe()
             /// engage RFC commands
             wp_nav.set_rfc_cmd(rfc_man);
 
-            /// compute scale direction due to pairing of motor spin direction
-            /// faulty motor odd number - reverse scaling of n+1 motor
-            /// faulty motor even number - reverse scaling of n-1 motor
-            if ((F_loc+1)%2 == 0){scale_dir = -1;}
-            else {scale_dir = 1;}
-
-            /// compute the geometric sides of affected rotor - based on unit circle
-
-            delt_gain = int_hold + PERT_AMP*pert_sign;
-
-            compute_geom_sides(1,0,&aside0,&cside0);
-            compute_geom_sides(1,delt_gain,&aside1,&cside1);
-
-            delt_gain = constrain_float(delt_gain,0,0.5);
-
-            for (i=0; i<sysid_num_motor; i++)
+            if (J_the_hold > 0)
             {
-                if (i == F_loc)
-                {
-                    rfc_gains[i] = cside0/cside1;
-                }
-                else if (i == F_loc + scale_dir)
-                {
-                    rfc_gains[i] = cside1/cside0;
-                }
-                else
-                {
-                    rfc_gains[i] = aside1/aside0;
-                }
-            }
+                /// compute scale direction due to pairing of motor spin direction
+                /// faulty motor odd number - reverse scaling of n+1 motor
+                /// faulty motor even number - reverse scaling of n-1 motor
+                if ((F_loc+1)%2 == 0){scale_dir = -1;}
+                else {scale_dir = 1;}
 
-            /// send RFC control allocation commands
-            // motors.get_rfc_gain(rfc_gains);
+                /// compute the geometric sides of affected rotor
+                /// The objective function parameter is updated in HPF has settled.
+                if (HPF_settled)
+                {
+                    /// add modulation signal. This preceeds the demodulation signal on the objective function
+                    if (pert_sign < 0){pert_sign = 1;}
+                    else{pert_sign = -1;}
+
+                    delt_gain = int_hold + pert_sign*PERC_AMP + INIT_LPF.out;
+                    delt_gain = constrain_float(delt_gain,0,0.5);
+                }
+
+                compute_geom_sides(1.5,0,&aside0,&bside0);
+                compute_geom_sides(1.5,delt_gain,&aside1,&bside1);
+
+                for (i=0; i<sysid_num_motor; i++)
+                {
+                    if (i == F_loc)
+                    {
+                        rfc_gains[i] = bside1/bside0; // This can remain unchanged given that's faulty
+                    }
+                    else if (i == F_loc + scale_dir)
+                    {
+                        rfc_gains[i] = bside0/bside1;
+                    }
+                    else
+                    {
+                        rfc_gains[i] = aside1/aside0;
+                    }
+                }
+
+                /// send RFC control allocation commands - through a low-pass filter
+                motors.get_rfc_gain(rfc_gains);
+            }
         }
 
         // execute the cost function once the sys_id flag is LOW and counter has exceeded
         if ((rfc_counter > MIN_PERIOD) && (rfc_counter < MAX_PERIOD) && (rfc_speed > 0))
         {
-            // J_the = J_the + (powf(p_meas - p_cmd,2) + powf(q_meas - q_cmd,2) + powf(r_meas - r_cmd,2))*G_Dt;
             J_the = J_the + (rfc_speed1/rfc_speed)*(powf((p_meas - p_cmd),2) + powf((q_meas - q_cmd),2))*G_Dt;
-            J_p = J_p + (rfc_speed1/rfc_speed)*powf(p_meas - p_cmd,2)*G_Dt;
-            J_q = J_q + (rfc_speed1/rfc_speed)*powf(q_meas - q_cmd,2)*G_Dt;
-            J_r = J_r + (rfc_speed1/rfc_speed)*powf(r_meas - r_cmd,2)*G_Dt;
-
-            filter_dtime += G_Dt; // increment filter time
         }
 
         /// reset RFC conditions
@@ -551,34 +661,50 @@ void Copter::rfc_exe()
         {
             wp_nav.set_rfc_cmd(0);
 
-            J_the_hold = J_the;
-
-            J_the = 0;
-
-            J_p = 0;
-            J_q = 0;
-            J_r = 0;
+            if (J_the > 0){J_the_counter++;} /// counter for he objective function
 
             rfc_counter = 0;
             rfc_man = 0;
 
-            /// demodulation signal - sinewave
-            if (pert_sign == 1){pert_sign = -1;}
-            else if (pert_sign == -1){pert_sign = 1;}
+            /// start of transition tracking
+            rfc_trans = 1;
+        }
 
-            /// reset filter sample time
-            filter_dtime = 0;
+        // compute the transition objective function ONLY IF inner loop objective function is non-zero
+        if ((rfc_trans) && (J_the > 0))
+        {
+            J_trans = J_trans + (rfc_speed1/rfc_speed)*(powf((p_meas - p_cmd),2) + powf((q_meas - q_cmd),2))*G_Dt;
         }
 
         /// compute filter output based on the hold value objective function
         exe_rfc_filter(&ES_HPF,J_the_hold,G_Dt);
 
-        /// compute filter ouput based demodulated objective function
-        exe_rfc_filter(&ES_LPF,ES_HPF.out*pert_sign*PERT_AMP,G_Dt);
+        /// ensure the filter settled flag is set with HPF value being positive and the sinusoid signal also positive
+        if (!HPF_settled && (sqrtf(ES_HPF.out*ES_HPF.out) < HPF_INIT_THRES) && (J_the_counter > 1))
+        {
+            HPF_settled = 1;
+        }
 
-        /// compute integrated filtered output
-        int_hold += ES_LOOP_GAIN*(ES_LPF.out);
+        /// Only activate feedback loop once objective function has been computed
+        if ((J_the_hold > 0))// && (rfc_counter < MIN_PERIOD))
+        {
+            /// Only start the LPF and integrator once the HPF has settled
+            /// This is minimize the step input into the control allocation computation
+            if (HPF_settled)
+            {
+                /// compute filter ouput based demodulated objective function
+                exe_rfc_filter(&ES_LPF,ES_HPF.out*pert_sign*PERT_AMP,G_Dt);
 
+                /// compute integrated filtered output
+                int_hold += ES_LOOP_GAIN*(ES_LPF.out);
+
+                /// limit output
+                // int_hold = constrain_float(int_hold,0,0.5);
+
+                /// execute the initial LPF output
+                exe_rfc_filter(&INIT_LPF,delt_gain0,G_Dt);
+            }
+        }
     }
 }
 
@@ -635,13 +761,11 @@ void Copter::exe_rfc_filter(struct rfc_filter *filter, float input, float dt)
     }
 }
 
-void Copter::compute_geom_sides(float delta, float gamma, float *a_side, float *c_side)
+void Copter::compute_geom_sides(float delta, float gamma, float *a_side, float *b_side)
 {
-    float b_side;
-
     *a_side = (delta*(2*delta*delta - gamma*gamma + gamma*sqrtf(2*delta*delta - gamma*gamma)))/(delta*delta - gamma*gamma);
 
-    b_side = (delta*(2*delta*delta - gamma*gamma - gamma*sqrtf(2*delta*delta - gamma*gamma)))/(delta*delta - gamma*gamma);
+    *b_side = (delta*(2*delta*delta - gamma*gamma - gamma*sqrtf(2*delta*delta - gamma*gamma)))/(delta*delta - gamma*gamma);
 
-    *c_side = b_side; //sqrtf(*a_side * *a_side + b_side * b_side);
+    //*c_side = sqrtf(*a_side * *a_side + b_side * b_side);
 }

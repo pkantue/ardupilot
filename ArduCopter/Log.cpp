@@ -810,6 +810,8 @@ struct PACKED log_FTC {
     float placeholder6;
     float placeholder7;
     float placeholder8;
+    float placeholder9;
+    float placeholder10;
 };
 
 // This is the Datablock write function for the FTC framework - This is to be used initially for debugging
@@ -819,17 +821,49 @@ void Copter::Log_Write_FTC(void)
         LOG_PACKET_HEADER_INIT(LOG_FTC_MSG),
         time_us         : AP_HAL::micros64(),
         placeholder1    : J_the,
-        placeholder2    : ES_HPF.out,
-        placeholder3    : ES_LPF.out,
-        placeholder4    : delt_gain,
-        placeholder5    : rfc_gains[0],
-        placeholder6    : rfc_gains[1],
-        placeholder7    : rfc_gains[2],
-        placeholder8    : int_hold
+        placeholder2    : J_trans,
+        placeholder3    : J_the_hold,
+        placeholder4    : ES_HPF.out,
+        placeholder5    : ES_LPF.out,
+        placeholder6    : INIT_LPF.out,
+        placeholder7    : delt_gain,
+        placeholder8    : rfc_gains[0],
+        placeholder9    : rfc_gains[1],
+        placeholder10   : int_hold
+    };
+    DataFlash.WriteBlock(&pkt, sizeof(pkt));
+}
+/*
+struct PACKED log_FDD {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    float placeholder1;
+    float placeholder2;
+    float placeholder3;
+    float placeholder4;
+    float placeholder5;
+    float placeholder6;
+    float placeholder7;
+};
+
+// This is the Datablock write function for the FTC framework - This is to be used initially for debugging
+void Copter::Log_Write_FDD(void)
+{
+    struct log_FDD pkt = {
+        LOG_PACKET_HEADER_INIT(LOG_FDD_MSG),
+        time_us         : AP_HAL::micros64(),
+        placeholder1    : num_var[0],
+        placeholder2    : num_var[1],
+        placeholder3    : num_var[2],
+        placeholder4    : num_var[3],
+        placeholder5    : (float)Q_rank,
+        placeholder6    : (float)F_mag,
+        placeholder7    : (float)update_matrix
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
 
+*/
 
 const struct LogStructure Copter::log_structure[] = {
     LOG_COMMON_STRUCTURES,
@@ -876,7 +910,9 @@ const struct LogStructure Copter::log_structure[] = {
     { LOG_PROXIMITY_MSG, sizeof(log_Proximity),
       "PRX",   "QBffffffff",  "TimeUS,Health,D0,D45,D90,D135,D180,D225,D270,D315" },
     { LOG_FTC_MSG, sizeof(log_FTC),
-      "FTC", "Qffffffff", "TimeUS,plc1,plc2,plc3,plc4,plc5,plc6,plc7,plc8" },
+      "FTC", "Qffffffffff", "TimeUS,plc1,plc2,plc3,plc4,plc5,plc6,plc7,plc8,plc9,plc10" },
+    /*{ LOG_FDD_MSG, sizeof(log_FDD),
+      "FDD", "Qfffffff", "TimeUS,plc1,plc2,plc3,plc4,plc5,plc6,plc7" }, */
 };
 
 #if CLI_ENABLED == ENABLED

@@ -104,12 +104,17 @@ void AP_MotorsMatrix::output_to_motors()
     if (_fault_type)
     {
         // emulate fault dynamics on chosen/random motor IF sysid maneuver is active
+        _thrust_sysid[_faulty_motor] = exe_servo_fault(_thrust_sysid[_faulty_motor]);
+
+        /*
         if ((_num_rotor_counter == _faulty_motor) && (_man_flag)){
             _thrust_sysid[_faulty_motor] = exe_servo_fault(_thrust_sysid[_faulty_motor]);
         }
         else{
             ini_servo_fault(); // initialize the servo fault emulator for next maneuver
         }
+        */
+
         fault_ratio[_faulty_motor] = 0.0;
     }
     // Thrust loss - condition 0
